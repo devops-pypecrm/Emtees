@@ -3874,6 +3874,7 @@ export const adminRouter = createRouter({
       const dayO2O = await db.select({
         id: oneToOneSessions.id,
         teacherId: oneToOneSessions.teacherId,
+        studentId: oneToOneSessions.studentId,
         status: oneToOneSessions.status,
         sessionLength: oneToOneSessions.sessionLength,
       })
@@ -3910,7 +3911,7 @@ export const adminRouter = createRouter({
         teacherMap[tid].o2oSessions++;
         if (sess.status === "completed") teacherMap[tid].completedClasses++;
         teacherMap[tid].totalMinutes += sess.sessionLength || 0;
-        teacherMap[tid].students.add(sess.teacherId);
+        if (sess.studentId) teacherMap[tid].students.add(sess.studentId);
       }
 
       const teacherIds = Object.keys(teacherMap).map(Number);
