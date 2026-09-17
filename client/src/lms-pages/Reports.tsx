@@ -3225,7 +3225,7 @@ export default function ReportsPage() {
                         date: a.recordedAt ? new Date(a.recordedAt).toLocaleDateString() : "-",
                         time: a.recordedAt ? new Date(a.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "-",
                         classType: a.sessionType || (a.class?.classType) || "group",
-                        duration: a.duration || a.class?.duration || a.class?.sessionLength || 0,
+                        duration: a.duration || a.class?.duration || (a.class as any)?.sessionLength || 0,
                         studentName: user.name,
                         teacherName: (a as any).teacher?.name || "Instructor",
                         batchName: (a as any).batch?.name || "-",
