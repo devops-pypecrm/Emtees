@@ -614,7 +614,7 @@ export const classRouter = createRouter({
       }
 
       await db.update(classes)
-        .set({ status: "ongoing", startedAt: new Date() })
+        .set({ status: "ongoing" })
         .where(eq(classes.id, input.id));
 
       const cbList = await db.select({ batchId: classBatches.batchId }).from(classBatches).where(eq(classBatches.classId, input.id));
@@ -1490,11 +1490,9 @@ export const classRouter = createRouter({
         throw new TRPCError({ code: "FORBIDDEN", message: "You are not authorized to start this session." });
       }
 
-      const startedAt = new Date();
       const updateData: any = {
         status: "ongoing",
-        startedAt,
-        lastHeartbeatAt: startedAt,
+        lastHeartbeatAt: new Date(),
       };
 
       if (isTeacher) {
