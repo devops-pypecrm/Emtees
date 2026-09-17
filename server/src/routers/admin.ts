@@ -2883,12 +2883,13 @@ export const adminRouter = createRouter({
           teacherName: users.name,
           startedAt: classes.startedAt,
           endedAt: classes.endedAt,
+          scheduledAt: classes.scheduledAt,
           classType: classes.classType,
         })
         .from(classes)
         .leftJoin(users, eq(classes.teacherId, users.id))
         .where(eq(classes.status, "completed"))
-        .orderBy(desc(classes.startedAt))
+        .orderBy(desc(classes.scheduledAt))
         .limit(200);
 
       const o2oSessions = await db
@@ -2898,12 +2899,13 @@ export const adminRouter = createRouter({
           teacherName: users.name,
           startedAt: oneToOneSessions.startedAt,
           endedAt: oneToOneSessions.endedAt,
+          scheduledAt: oneToOneSessions.scheduledAt,
           studentAttendance: oneToOneSessions.studentAttendance,
         })
         .from(oneToOneSessions)
         .leftJoin(users, eq(oneToOneSessions.teacherId, users.id))
         .where(eq(oneToOneSessions.status, "completed"))
-        .orderBy(desc(oneToOneSessions.startedAt))
+        .orderBy(desc(oneToOneSessions.scheduledAt))
         .limit(200);
 
       const combined = [
@@ -2911,10 +2913,10 @@ export const adminRouter = createRouter({
         ...o2oSessions.map(c => ({ ...c, classType: "one-on-one", isGroup: false }))
       ];
 
-      // Sort combined by startedAt desc and limit to 200
+      // Sort combined by scheduledAt desc and limit to 200
       combined.sort((a, b) => {
-        const dateA = a.startedAt ? a.startedAt.getTime() : 0;
-        const dateB = b.startedAt ? b.startedAt.getTime() : 0;
+        const dateA = a.scheduledAt ? a.scheduledAt.getTime() : 0;
+        const dateB = b.scheduledAt ? b.scheduledAt.getTime() : 0;
         return dateB - dateA;
       });
       const topClasses = combined.slice(0, 200);
