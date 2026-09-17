@@ -2887,6 +2887,7 @@ export const adminRouter = createRouter({
         })
         .from(classes)
         .leftJoin(users, eq(classes.teacherId, users.id))
+        .where(eq(classes.status, "completed"))
         .orderBy(desc(classes.startedAt))
         .limit(200);
 
@@ -2901,6 +2902,7 @@ export const adminRouter = createRouter({
         })
         .from(oneToOneSessions)
         .leftJoin(users, eq(oneToOneSessions.teacherId, users.id))
+        .where(eq(oneToOneSessions.status, "completed"))
         .orderBy(desc(oneToOneSessions.startedAt))
         .limit(200);
 
@@ -2945,6 +2947,10 @@ export const adminRouter = createRouter({
           ? (attendanceMap[c.classId] || 0) 
           : (c.studentAttendance === "present" ? 1 : 0);
           
+        const durationMinutes = c.startedAt && c.endedAt 
+          ? (c.endedAt.getTime() - c.startedAt.getTime()) / (1000 * 60)
+          : 0;
+          
         return {
           classId: c.classId,
           title: c.title,
@@ -2953,7 +2959,7 @@ export const adminRouter = createRouter({
           endedAt: c.endedAt,
           classType: c.classType || "group",
           validStudents,
-          isValid: validStudents > 0,
+          isValid: validStudents > 0 && durationMinutes >= 20,
         };
       });
     }),
