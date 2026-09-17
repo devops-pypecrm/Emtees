@@ -662,7 +662,7 @@ export default function Dashboard() {
                   isPast,
                 };
               })
-              .filter((cls) => !cls.isPast)
+              .filter((cls) => !cls.isPast && cls.classType === "one_to_one")
               .filter((cls) => {
                 if (!searchQuery) return true;
                 const studentName = (cls.student?.name || cls.studentName || "").toLowerCase();
