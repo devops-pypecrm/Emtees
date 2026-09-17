@@ -3,7 +3,6 @@ import { getDb } from "../queries/connection";
 import { attendanceEvents, classes, oneToOneSessions } from "@db/schema";
 import { eq, sql } from "drizzle-orm";
 import { evaluateClassCompletion } from "../lib/classEngine";
-import { syncOneToOneAttendance } from "./classes";
 
 export const webhookRouter = Router();
 
@@ -92,7 +91,7 @@ webhookRouter.post("/jitsi", async (req: Request, res: Response) => {
              completedAt: endedAt
            }).where(eq(oneToOneSessions.id, otoSessionId!));
            
-           await syncOneToOneAttendance(db, otoSessionId!, userId);
+           await evaluateClassCompletion(undefined, otoSessionId!);
         }
       }
     }

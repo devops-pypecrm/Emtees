@@ -1,8 +1,9 @@
-import { db } from "./server/db/index";
-import { profiles, batches, batchEnrollments } from "./server/db/schema";
+import { getDb } from "./src/queries/connection";
+import { profiles, batches, batchEnrollments } from "./db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 
 async function run() {
+  const db = getDb();
   console.log("Starting backfill...");
   const enrollments = await db.select({
     studentId: batchEnrollments.studentId,

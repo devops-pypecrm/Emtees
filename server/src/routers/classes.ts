@@ -1683,7 +1683,7 @@ export const classRouter = createRouter({
         completedAt: endedAt,
       }).where(eq(oneToOneSessions.id, input.sessionId));
 
-      await syncOneToOneAttendance(db, input.sessionId, ctx.user.id);
+      await evaluateClassCompletion(undefined, input.sessionId);
 
       await updateStudentSessionBalances(db, session.studentId);
 
@@ -1731,7 +1731,7 @@ export const classRouter = createRouter({
         .set({ status: "completed", completedAt: new Date(), actualDuration: input.actualDurationMinutes })
         .where(eq(oneToOneSessions.id, input.sessionId));
 
-      await syncOneToOneAttendance(db, input.sessionId, ctx.user.id);
+      await evaluateClassCompletion(undefined, input.sessionId);
 
       // Recalculate salary for this teacher and month
       const monthStr = new Date(session.scheduledAt).toISOString().substring(0, 7);
@@ -3032,52 +3032,3 @@ export const classRouter = createRouter({
     }),
 });
 
-export async function syncOneToOneAttendance(db: any, sessionId: number, userId?: number) {
-  const session = await db.query.oneToOneSessions.findFirst({
-    where: eq(oneToOneSessions.id, sessionId),
-  });
-  if (!session || session.status !== "completed") return;
-
-  const enrollment = await db.query.batchEnrollments.findFirst({
-    where: and(
-      eq(batchEnrollments.studentId, session.studentId),
-      eq(batchEnrollments.status, "active")
-    ),
-    with: { batch: true },
-  });
-  const batchId = enrollment?.batchId || null;
-  const moduleId = enrollment?.moduleId || enrollment?.batch?.moduleId || null;
-
-  const status = session.studentAttendance === "present" ? "present" : "absent";
-
-  const existing = await db.query.attendance.findFirst({
-    where: eq(attendance.oneToOneSessionId, sessionId),
-  });
-
-  const attendanceData = {
-    oneToOneSessionId: sessionId,
-    studentId: session.studentId,
-    teacherId: session.teacherId,
-    batchId: batchId ? Number(batchId) : null,
-    moduleId: moduleId ? Number(moduleId) : null,
-    status,
-    attendanceDate: session.scheduledAt,
-    sessionType: "one_to_one",
-    duration: session.actualDuration || session.sessionLength || 0,
-    meetingId: session.meetingRoomId,
-    remarks: session.remarks,
-    updatedBy: userId || session.teacherId,
-    recordedAt: session.completedAt || new Date(),
-  };
-
-  if (existing) {
-    await db.update(attendance)
-      .set(attendanceData)
-      .where(eq(attendance.id, existing.id));
-  } else {
-    await db.insert(attendance).values({
-      ...attendanceData,
-      createdBy: userId || session.teacherId,
-    });
-  }
-}

@@ -673,10 +673,40 @@ export async function autoEndStaleSessions(): Promise<void> {
     await updateStudentSessionBalances(db, session.studentId);
     
     // Sync attendance to log the actual class
-    const { syncOneToOneAttendance } = await import("../routers/classes");
-    await syncOneToOneAttendance(db, session.id);
+    const { evaluateClassCompletion } = await import("./classEngine");
+    await evaluateClassCompletion(undefined, session.id);
 
     // Notify clients that the class was ended
+    const { getIo } = await import("./socketInstance");
+    const io = getIo();
+    if (io) {
+      io.emit("class:updated");
+    }
+  }
+
+  // Find Group classes that have been ongoing for more than 3 hours
+  const staleGroupClasses = await db.query.classes.findMany({
+    where: and(
+      eq(classes.status, "ongoing"),
+      isNotNull(classes.startedAt),
+      lte(classes.startedAt, threeHoursAgo)
+    )
+  });
+
+  for (const cls of staleGroupClasses) {
+    const startedAt = cls.startedAt || cls.scheduledAt;
+    const durationMins = cls.duration || 60; // default 60 mins for group class
+    const endedAt = new Date(startedAt.getTime() + durationMins * 60000);
+
+    await db.update(classes).set({
+      status: "completed",
+      endedAt,
+      actualDuration: durationMins
+    }).where(eq(classes.id, cls.id));
+
+    const { evaluateClassCompletion } = await import("./classEngine");
+    await evaluateClassCompletion(cls.id, undefined);
+
     const { getIo } = await import("./socketInstance");
     const io = getIo();
     if (io) {

@@ -1924,6 +1924,7 @@ export const adminRouter = createRouter({
                 batch: newBatch.name,
                 batchTime: newBatch.timeSlot,
                 course: newBatch.module?.name || null,
+                moduleId: newBatch.moduleId, // Add moduleId update here
                 feesTotal: String(nextTotal),
                 feesBalance: String(nextBalance),
                 paymentStatus: nextPaymentStatus,
