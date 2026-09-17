@@ -204,10 +204,11 @@ export const studentsRouter = createRouter({
         }
         
         if (courseUserIds.length > 0) {
-          filters.push(or(
+          const cf = or(
             inArray(users.id, courseUserIds),
             eq(profiles.moduleId, input.courseId)
-          ));
+          );
+          if (cf) filters.push(cf);
         } else {
           filters.push(eq(profiles.moduleId, input.courseId));
         }
