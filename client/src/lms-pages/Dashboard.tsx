@@ -634,7 +634,8 @@ export default function Dashboard() {
             const classesList = (classesQuery.data || [])
               .map((cls: any) => {
                 const startTime = new Date(cls.scheduledAt);
-                const endTime = new Date(startTime.getTime() + (cls.duration || 0) * 60 * 1000);
+                const duration = cls.duration || cls.sessionLength || 30;
+                const endTime = new Date(startTime.getTime() + duration * 60 * 1000);
                 const diffMs = startTime.getTime() - nowTime;
 
                 let statusLabel: "LIVE NOW" | "STARTING SOON" | "UPCOMING" = "UPCOMING";
