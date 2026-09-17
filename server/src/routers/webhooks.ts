@@ -88,7 +88,7 @@ webhookRouter.post("/jitsi", async (req: Request, res: Response) => {
            await db.update(oneToOneSessions).set({
              status: "completed",
              endedAt,
-             actualDuration: sql`CASE WHEN ${oneToOneSessions.actualDuration} > 0 THEN ${oneToOneSessions.actualDuration} ELSE ${actualDuration > 0 ? actualDuration : 0} END`,
+             actualDuration: actualDuration > 0 ? actualDuration : 0,
              completedAt: endedAt
            }).where(eq(oneToOneSessions.id, otoSessionId!));
            
