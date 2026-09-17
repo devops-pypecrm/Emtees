@@ -95,7 +95,7 @@ export const classRouter = createRouter({
         const where = groupFilters.length > 0 ? and(...groupFilters) : undefined;
         groupClassesList = await db.query.classes.findMany({
           where,
-          limit: input?.limit || 100,
+          limit: input?.limit || 1000,
           orderBy: desc(classes.scheduledAt),
           with: {
             teacher: true,
@@ -152,7 +152,7 @@ export const classRouter = createRouter({
         const oToWhere = oToFilters.length > 0 ? and(...oToFilters) : undefined;
         oneToOnesList = await db.query.oneToOneSessions.findMany({
           where: oToWhere,
-          limit: input?.limit || 100,
+          limit: input?.limit || 1000,
           orderBy: desc(oneToOneSessions.scheduledAt),
           with: {
             teacher: true,
