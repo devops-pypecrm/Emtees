@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
 import { getDb } from "../queries/connection";
-import { attendanceEvents } from "@db/schema";
+import { attendanceEvents, classes, oneToOneSessions } from "@db/schema";
+import { eq, sql } from "drizzle-orm";
+import { evaluateClassCompletion } from "../lib/classEngine";
+import { syncOneToOneAttendance } from "./classes";
 
 export const webhookRouter = Router();
 
@@ -15,20 +18,22 @@ webhookRouter.post("/jitsi", async (req: Request, res: Response) => {
     
     const eventType = payload.eventType || payload.event_type;
     const roomName = payload.roomName || payload.room_name;
-    // We assume the user ID is passed back through the JWT claims or as participant ID
     const userIdStr = payload.occupant?.id || payload.participant?.id;
     
     if (!eventType || !roomName) {
       return res.status(400).json({ error: "Missing required fields" });
     }
     
-    // Extract classId from roomName (format: emtees-{slug}-{classId})
-    const match = roomName.match(/emtees-.*-(\d+)$/);
-    if (!match) {
-      return res.status(400).json({ error: "Invalid room name format" });
+    const db = getDb();
+    const groupCls = await db.query.classes.findFirst({ where: eq(classes.meetingRoomId, roomName) });
+    const otoCls = await db.query.oneToOneSessions.findFirst({ where: eq(oneToOneSessions.meetingRoomId, roomName) });
+
+    if (!groupCls && !otoCls) {
+      return res.status(400).json({ error: "Invalid room name, no class found" });
     }
-    
-    const classId = parseInt(match[1], 10);
+
+    const classId = groupCls ? groupCls.id : null;
+    const otoSessionId = otoCls ? otoCls.id : null;
     const userId = userIdStr ? parseInt(userIdStr, 10) : null;
     
     if (!userId || isNaN(userId)) {
@@ -43,15 +48,53 @@ webhookRouter.post("/jitsi", async (req: Request, res: Response) => {
     }
     
     if (dbEventType) {
-      const db = getDb();
       await db.insert(attendanceEvents).values({
-        classId,
+        classId: classId || null,
+        oneToOneSessionId: otoSessionId || null,
         userId,
         eventType: dbEventType,
         timestamp: new Date(),
         metadata: payload,
       });
-      // A background job or post-hook will calculate the 20-min logic
+
+      if (groupCls) {
+        if (dbEventType === "join" && userId === groupCls.teacherId) {
+           if (!groupCls.startedAt) {
+             await db.update(classes).set({ status: "ongoing", startedAt: new Date() }).where(eq(classes.id, classId!));
+           } else if (groupCls.status !== "ongoing") {
+             await db.update(classes).set({ status: "ongoing" }).where(eq(classes.id, classId!));
+           }
+        } else if (dbEventType === "leave" && userId === groupCls.teacherId) {
+           const endedAt = new Date();
+           const actualDuration = groupCls.startedAt ? Math.floor((endedAt.getTime() - new Date(groupCls.startedAt).getTime()) / 60000) : 0;
+           await db.update(classes).set({ status: "completed", endedAt, actualDuration }).where(eq(classes.id, classId!));
+           await evaluateClassCompletion(classId!);
+        }
+      }
+
+      if (otoCls) {
+        if (dbEventType === "join" && userId === otoCls.teacherId) {
+           if (!otoCls.startedAt) {
+             await db.update(oneToOneSessions).set({ status: "ongoing", startedAt: new Date(), teacherAttendance: "present" }).where(eq(oneToOneSessions.id, otoSessionId!));
+           } else if (otoCls.status !== "ongoing") {
+             await db.update(oneToOneSessions).set({ status: "ongoing", teacherAttendance: "present" }).where(eq(oneToOneSessions.id, otoSessionId!));
+           }
+        } else if (dbEventType === "join" && userId === otoCls.studentId) {
+           await db.update(oneToOneSessions).set({ studentAttendance: "present" }).where(eq(oneToOneSessions.id, otoSessionId!));
+        } else if (dbEventType === "leave" && userId === otoCls.teacherId) {
+           const endedAt = new Date();
+           const startedAt = otoCls.startedAt || otoCls.scheduledAt;
+           const actualDuration = startedAt ? Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 60000) : 0;
+           await db.update(oneToOneSessions).set({
+             status: "completed",
+             endedAt,
+             actualDuration: sql`CASE WHEN ${oneToOneSessions.actualDuration} > 0 THEN ${oneToOneSessions.actualDuration} ELSE ${actualDuration > 0 ? actualDuration : 0} END`,
+             completedAt: endedAt
+           }).where(eq(oneToOneSessions.id, otoSessionId!));
+           
+           await syncOneToOneAttendance(db, otoSessionId!, userId);
+        }
+      }
     }
     
     res.status(200).json({ success: true });
