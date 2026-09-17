@@ -191,20 +191,26 @@ export const studentsRouter = createRouter({
           .from(batches)
           .where(eq(batches.moduleId, input.courseId));
         const courseBatchIds = courseBatches.map((cb) => cb.id);
-        if (courseBatchIds.length === 0) {
-          return { items: [], total: 0 };
+        
+        let courseUserIds: number[] = [];
+        if (courseBatchIds.length > 0) {
+          const courseUsers = await db.select({ studentId: batchEnrollments.studentId })
+            .from(batchEnrollments)
+            .where(and(
+              inArray(batchEnrollments.batchId, courseBatchIds),
+              eq(batchEnrollments.status, "active")
+            ));
+          courseUserIds = courseUsers.map((cu) => cu.studentId);
         }
-        const courseUsers = await db.select({ studentId: batchEnrollments.studentId })
-          .from(batchEnrollments)
-          .where(and(
-            inArray(batchEnrollments.batchId, courseBatchIds),
-            eq(batchEnrollments.status, "active")
+        
+        if (courseUserIds.length > 0) {
+          filters.push(or(
+            inArray(users.id, courseUserIds),
+            eq(profiles.moduleId, input.courseId)
           ));
-        const courseUserIds = courseUsers.map((cu) => cu.studentId);
-        if (courseUserIds.length === 0) {
-          return { items: [], total: 0 };
+        } else {
+          filters.push(eq(profiles.moduleId, input.courseId));
         }
-        filters.push(inArray(users.id, courseUserIds));
       }
 
       const where = and(...filters);
