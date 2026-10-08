@@ -26,6 +26,7 @@ import Users from "./lms-pages/Users";
 import QualificationManagement from "./lms-pages/QualificationManagement";
 import Login from "./lms-pages/Login";
 import Admission from "./lms-pages/Admission";
+import DownloadApp from "./lms-pages/DownloadApp";
 import SalesExecutiveStudents from "./lms-pages/SalesExecutiveStudents";
 import SalesExecutives from "./lms-pages/SalesExecutives";
 import SalesRegistrations from "./lms-pages/SalesRegistrations";
@@ -100,6 +101,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterRedirect />} />
         <Route path="/admission/:code" element={<Admission />} />
+        <Route path="/app" element={<DownloadApp />} />
         
         {/* Protected Dashboard Routes */}
         <Route path="/" element={<ProtectedLayout />}>

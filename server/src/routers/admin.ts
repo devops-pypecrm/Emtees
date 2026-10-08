@@ -2414,7 +2414,7 @@ export const adminRouter = createRouter({
     });
     const map = new Map(settingsList.map((s) => [s.key, s.value]));
     return {
-      class_duration_threshold: parseInt(map.get("class_duration_threshold") || "20", 10),
+      class_duration_threshold: parseInt(map.get("class_duration_threshold") || "25", 10),
       absent_consecutive_threshold: parseInt(map.get("absent_consecutive_threshold") || "7", 10),
     };
   }),

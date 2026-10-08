@@ -10,6 +10,7 @@ import { setupSocketHandlers } from "./lib/socketHandlers";
 import { startScheduler, runSchedulerTasks } from "./lib/scheduler";
 import { applyMigrations } from "../db/apply-migrations";
 import { webhookRouter } from "./routers/webhooks";
+import { mobileRouter } from "./routers/mobile";
 import "dotenv/config";
 
 if (process.env.LOG_LEVEL === "error") {
@@ -35,6 +36,7 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 app.use("/api/webhooks", webhookRouter);
+app.use("/api/mobile", mobileRouter);
 
 // tRPC express middleware
 app.use(

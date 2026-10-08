@@ -2,7 +2,6 @@ import { Router, Request, Response } from "express";
 import { getDb } from "../queries/connection";
 import { attendanceEvents, classes, oneToOneSessions } from "@db/schema";
 import { eq, sql } from "drizzle-orm";
-import { evaluateClassCompletion } from "../lib/classEngine";
 
 export const webhookRouter = Router();
 
@@ -63,12 +62,9 @@ webhookRouter.post("/jitsi", async (req: Request, res: Response) => {
            } else if (groupCls.status !== "ongoing") {
              await db.update(classes).set({ status: "ongoing" }).where(eq(classes.id, classId!));
            }
-        } else if (dbEventType === "leave" && userId === groupCls.teacherId) {
-           const endedAt = new Date();
-           const actualDuration = groupCls.startedAt ? Math.floor((endedAt.getTime() - new Date(groupCls.startedAt).getTime()) / 60000) : 0;
-           await db.update(classes).set({ status: "completed", endedAt, actualDuration }).where(eq(classes.id, classId!));
-           await evaluateClassCompletion(classId!);
         }
+        // Teacher leave: do NOT finalize here. The scheduler finalizes after the
+        // 5-minute rejoin grace window (see finalizeDisconnectedSessions).
       }
 
       if (otoCls) {
@@ -80,22 +76,11 @@ webhookRouter.post("/jitsi", async (req: Request, res: Response) => {
            }
         } else if (dbEventType === "join" && userId === otoCls.studentId) {
            await db.update(oneToOneSessions).set({ studentAttendance: "present" }).where(eq(oneToOneSessions.id, otoSessionId!));
-        } else if (dbEventType === "leave" && userId === otoCls.teacherId) {
-           const endedAt = new Date();
-           const startedAt = otoCls.startedAt || otoCls.scheduledAt;
-           const actualDuration = startedAt ? Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 60000) : 0;
-           await db.update(oneToOneSessions).set({
-             status: "completed",
-             endedAt,
-             actualDuration: actualDuration > 0 ? actualDuration : 0,
-             completedAt: endedAt
-           }).where(eq(oneToOneSessions.id, otoSessionId!));
-           
-           await evaluateClassCompletion(undefined, otoSessionId!);
         }
+        // Teacher leave: finalized by the scheduler after the 5-minute grace window.
       }
     }
-    
+
     res.status(200).json({ success: true });
   } catch (err: any) {
     console.error("[jitsi webhook] error:", err);

@@ -6,7 +6,7 @@ import { NotificationService } from "./notificationService";
 
 async function getClassDurationThreshold(db: ReturnType<typeof getDb>): Promise<number> {
   const setting = await db.query.systemSettings.findFirst({ where: eq(systemSettings.key, "class_duration_threshold") });
-  return setting ? parseInt(setting.value) || 20 : 20;
+  return setting ? parseInt(setting.value) || 25 : 25;
 }
 
 export async function evaluateClassCompletion(classId?: number, oneToOneSessionId?: number) {
@@ -177,11 +177,16 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
     }
   }
 
-  // Calculate remuneration if teacher met the rule
-  if (teacherValid) {
-    const monthStr = classEndTime.toISOString().substring(0, 7);
-    await recalculateSalaryInternal(db, teacherId, monthStr);
+  // Always recalculate remuneration (even when invalid) so a re-evaluated class
+  // that no longer qualifies is removed from the salary instead of going stale
+  if (!teacherValid) {
+    const refCond = classId
+      ? eq(classLedgerTransactions.referenceClassId, classId)
+      : eq(classLedgerTransactions.referenceOneToOneId, oneToOneSessionId!);
+    await db.delete(classLedgerTransactions).where(and(refCond, eq(classLedgerTransactions.type, "debit")));
   }
+  const monthStr = (cls.scheduledAt || classEndTime).toISOString().substring(0, 7);
+  await recalculateSalaryInternal(db, teacherId, monthStr);
 
   // 5. Post-Class Followups: Auto-message absentees
   if (isOneToOne) {

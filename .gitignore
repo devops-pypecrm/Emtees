@@ -44,3 +44,4 @@ coverage/
 emtees-deploy.tar.gz
 server/global-bundle.pem
 emtees-deploy*.tar.gz
+*.pem

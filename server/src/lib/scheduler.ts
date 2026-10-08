@@ -630,6 +630,45 @@ export async function checkExpiryAlerts(): Promise<void> {
   }
 }
 
+const REJOIN_GRACE_MS = 5 * 60 * 1000;
+
+// Finalizes classes whose teacher left and did not rejoin within the 5-minute grace window.
+export async function finalizeDisconnectedSessions(): Promise<void> {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - REJOIN_GRACE_MS);
+  const { attendanceEvents } = await import("@db/schema");
+  const { evaluateClassCompletion } = await import("./classEngine");
+
+  const lastTeacherEventIsLeave = async (where: any, teacherId: number) => {
+    const [last] = await db.select().from(attendanceEvents)
+      .where(and(where, eq(attendanceEvents.userId, teacherId)))
+      .orderBy(desc(attendanceEvents.timestamp)).limit(1);
+    return last && last.eventType === "leave" && last.timestamp <= cutoff ? last.timestamp : null;
+  };
+
+  const ongoingGroup = await db.query.classes.findMany({ where: eq(classes.status, "ongoing") });
+  for (const cls of ongoingGroup) {
+    const leftAt = await lastTeacherEventIsLeave(eq(attendanceEvents.classId, cls.id), cls.teacherId);
+    if (!leftAt) continue;
+    const actualDuration = cls.startedAt ? Math.floor((leftAt.getTime() - new Date(cls.startedAt).getTime()) / 60000) : 0;
+    await db.update(classes).set({ status: "completed", endedAt: leftAt, actualDuration }).where(eq(classes.id, cls.id));
+    await evaluateClassCompletion(cls.id);
+  }
+
+  const ongoingOto = await db.query.oneToOneSessions.findMany({ where: eq(oneToOneSessions.status, "ongoing") });
+  for (const sess of ongoingOto) {
+    const leftAt = await lastTeacherEventIsLeave(eq(attendanceEvents.oneToOneSessionId, sess.id), sess.teacherId);
+    if (!leftAt) continue;
+    const startedAt = sess.startedAt || sess.scheduledAt;
+    const actualDuration = Math.max(0, Math.floor((leftAt.getTime() - new Date(startedAt).getTime()) / 60000));
+    await db.update(oneToOneSessions).set({ status: "completed", endedAt: leftAt, completedAt: leftAt, actualDuration }).where(eq(oneToOneSessions.id, sess.id));
+    await evaluateClassCompletion(undefined, sess.id);
+  }
+
+  const { getIo } = await import("./socketInstance");
+  getIo()?.emit("class:updated");
+}
+
 export async function autoEndStaleSessions(): Promise<void> {
   const db = getDb();
   const now = new Date();
@@ -721,6 +760,7 @@ export async function runSchedulerTasks(): Promise<void> {
   await processFeesAndRestrictions();
   // await sendDueDateReminders(); // if exists
   await expireOneToOneSessions();
+  await finalizeDisconnectedSessions();
   await autoEndStaleSessions();
   await cleanupExpiredRecordings();
   await checkStudentConsecutiveAbsences();
