@@ -36,6 +36,9 @@ import { sendNotification } from "../lib/notificationEngine";
 import { updateStudentSessionBalances } from "../lib/sessionHelper";
 import { recalculateStudentFees } from "../lib/feeHelper";
 
+// Standard per-class pay (INR) used when a teacher has no explicit salary config.
+export const DEFAULT_CLASS_RATES = { 30: 75, 45: 100, 60: 125 } as const;
+
 export function getDurationCategory(duration: number): 30 | 45 | 60 | null {
   if (duration >= 50 && duration <= 70) return 60;
   if (duration >= 35 && duration <= 55) return 45;
@@ -524,12 +527,12 @@ export async function recalculateSalaryInternal(
   });
 
   const basicSalary = config ? parseFloat(config.basicSalary) : 0;
-  const group30MinRate = config ? parseFloat(config.group30MinRate) : 0;
-  const group45MinRate = config ? parseFloat(config.group45MinRate) : 0;
-  const group60MinRate = config ? parseFloat(config.group60MinRate) : 0;
-  const oneToOne30MinRate = config ? parseFloat(config.oneToOne30MinRate) : 0;
-  const oneToOne45MinRate = config ? parseFloat(config.oneToOne45MinRate) : 0;
-  const oneToOne60MinRate = config ? parseFloat(config.oneToOne60MinRate) : 0;
+  const group30MinRate = config ? parseFloat(config.group30MinRate) : DEFAULT_CLASS_RATES[30];
+  const group45MinRate = config ? parseFloat(config.group45MinRate) : DEFAULT_CLASS_RATES[45];
+  const group60MinRate = config ? parseFloat(config.group60MinRate) : DEFAULT_CLASS_RATES[60];
+  const oneToOne30MinRate = config ? parseFloat(config.oneToOne30MinRate) : DEFAULT_CLASS_RATES[30];
+  const oneToOne45MinRate = config ? parseFloat(config.oneToOne45MinRate) : DEFAULT_CLASS_RATES[45];
+  const oneToOne60MinRate = config ? parseFloat(config.oneToOne60MinRate) : DEFAULT_CLASS_RATES[60];
   // 5. Calculate Total Earnings & Net Salary
   const sessionEarnings =
     (group30Count * group30MinRate) +

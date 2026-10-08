@@ -61,6 +61,7 @@ const navItems = [
   { icon: Award, label: "Performance", path: "/performance" },
   { icon: GitPullRequest, label: "Requests", path: "/requests" },
   { icon: BarChart3, label: "Reports", path: "/reports" },
+  { icon: BarChart3, label: "Teacher Reports", path: "/teacher-reports" },
   { icon: Bell, label: "Notifications", path: "/notifications" },
   { icon: Shield, label: "Discipline", path: "/discipline" },
   { icon: Settings, label: "Settings", path: "/settings" },
@@ -194,6 +195,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     items = items.filter((item) => item.path !== "/sales-management/executives");
   }
   if (!["super_admin", "admin", "academic_head"].includes(user.role)) {
+    items = items.filter((item) => item.path !== "/teacher-reports");
+  }
+  if (!["super_admin", "admin", "academic_head"].includes(user.role)) {
     items = items.filter((item) => item.path !== "/qualifications");
   }
   if (user.role !== "academic_head") {
@@ -215,6 +219,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       "/discipline",
       "/qualifications",
       "/reports",
+      "/teacher-reports",
     ];
     items = items.filter((item) => allowedPaths.includes(item.path));
   }

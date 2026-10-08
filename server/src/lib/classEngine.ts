@@ -4,9 +4,14 @@ import { attendanceEvents, attendance, classLedgerTransactions, classes, users, 
 import { recalculateSalaryInternal } from "../routers/admin";
 import { NotificationService } from "./notificationService";
 
+// A class counts only if both parties stayed at least this many minutes (spec: 25 of 30).
+export const DEFAULT_CLASS_DURATION_THRESHOLD = 25;
+// A dropped participant has this long to rejoin and continue "seamlessly".
+export const REJOIN_GRACE_MINUTES = 5;
+
 async function getClassDurationThreshold(db: ReturnType<typeof getDb>): Promise<number> {
   const setting = await db.query.systemSettings.findFirst({ where: eq(systemSettings.key, "class_duration_threshold") });
-  return setting ? parseInt(setting.value) || 25 : 25;
+  return setting ? parseInt(setting.value) || DEFAULT_CLASS_DURATION_THRESHOLD : DEFAULT_CLASS_DURATION_THRESHOLD;
 }
 
 export async function evaluateClassCompletion(classId?: number, oneToOneSessionId?: number) {
@@ -37,22 +42,31 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
 
   const events = await db.select().from(attendanceEvents).where(eventsQuery).orderBy(attendanceEvents.timestamp);
   
-  // Calculate duration per user
+  // Calculate duration per user. A rejoin within REJOIN_GRACE_MINUTES of a drop
+  // bridges the gap (counted as attended) so a network blip doesn't invalidate the class.
   const userDurations: Record<number, number> = {};
   const activeSessions: Record<number, Date> = {};
+  const lastLeave: Record<number, Date> = {};
 
   for (const event of events) {
     const uid = event.userId;
     if (event.eventType === "join") {
       if (!activeSessions[uid]) {
         activeSessions[uid] = event.timestamp;
+        const prevLeave = lastLeave[uid];
+        if (prevLeave) {
+          const gapMins = (event.timestamp.getTime() - prevLeave.getTime()) / 60000;
+          if (gapMins <= REJOIN_GRACE_MINUTES) {
+            userDurations[uid] = (userDurations[uid] || 0) + gapMins;
+          }
+        }
       }
     } else if (event.eventType === "leave") {
       if (activeSessions[uid]) {
-        const diffMs = event.timestamp.getTime() - activeSessions[uid].getTime();
-        const diffMins = diffMs / 60000;
+        const diffMins = (event.timestamp.getTime() - activeSessions[uid].getTime()) / 60000;
         userDurations[uid] = (userDurations[uid] || 0) + diffMins;
         delete activeSessions[uid]; // End this session block
+        lastLeave[uid] = event.timestamp;
       }
     }
   }
@@ -60,9 +74,15 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
   // If the class ended, anyone still "active" gets duration calculated until class endedAt (or now)
   const classEndTime = cls.endedAt || cls.completedAt || new Date();
   for (const uid in activeSessions) {
-    const diffMs = classEndTime.getTime() - activeSessions[uid].getTime();
-    const diffMins = diffMs / 60000;
+    const diffMins = (classEndTime.getTime() - activeSessions[uid].getTime()) / 60000;
     userDurations[uid] = (userDurations[uid] || 0) + diffMins;
+  }
+
+  // Fallback for 1-to-1: when the Jitsi webhook never delivered events (misconfigured / blocked),
+  // use the minute-by-minute heartbeat counters recorded by the client apps.
+  if (isOneToOne) {
+    if (!userDurations[cls.teacherId] && cls.teacherDuration) userDurations[cls.teacherId] = cls.teacherDuration;
+    if (!userDurations[cls.studentId] && cls.studentDuration) userDurations[cls.studentId] = cls.studentDuration;
   }
 
   // 3. Determine if teacher met the configurable duration threshold
@@ -185,8 +205,26 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
       : eq(classLedgerTransactions.referenceOneToOneId, oneToOneSessionId!);
     await db.delete(classLedgerTransactions).where(and(refCond, eq(classLedgerTransactions.type, "debit")));
   }
-  const monthStr = (cls.scheduledAt || classEndTime).toISOString().substring(0, 7);
-  await recalculateSalaryInternal(db, teacherId, monthStr);
+  // Keep the session's recorded duration in sync with what was actually validated
+  if (isOneToOne) {
+    await db.update(oneToOneSessions).set({
+      teacherDuration: Math.floor(teacherDuration),
+      studentDuration: Math.floor(userDurations[cls.studentId] || 0),
+    }).where(eq(oneToOneSessions.id, oneToOneSessionId!));
+  }
+
+  // Always refresh the month's salary (forceInsert) so the report is created/updated automatically
+  // as soon as the class is evaluated — previously the row was only updated if it already existed.
+  const scheduledAt: Date = cls.scheduledAt || classEndTime;
+  const monthStr = scheduledAt.toISOString().substring(0, 7);
+  await recalculateSalaryInternal(db, teacherId, monthStr, true);
+
+  const { updateStudentSessionBalances } = await import("./sessionHelper");
+  for (const sid of students) {
+    await updateStudentSessionBalances(db, sid).catch((e: any) => console.error("[classEngine] balance sync failed:", e));
+  }
+  const { getIo } = await import("./socketInstance");
+  getIo()?.emit("class:updated");
 
   // 5. Post-Class Followups: Auto-message absentees
   if (isOneToOne) {

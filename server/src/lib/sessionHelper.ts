@@ -128,19 +128,29 @@ export async function updateStudentSessionBalances(db: any, studentId: number) {
       .where(eq(batchEnrollments.id, enrollment.id));
   }
 
-  // Sync studentClassAllocations table — preserve designatedTime and manually-set
-  // completed counts from existing allocation. Use Math.max so that:
-  //   - Real DB-recorded sessions always win when they exceed the manual count
-  //   - Manually-entered historical counts are preserved when DB shows 0
+  // Sync studentClassAllocations table — preserve designatedTime and the admin-entered
+  // "already taken" legacy counts (classes tracked on WhatsApp before the LMS). Those are ADDED to the
+  // DB-recorded sessions, so only the genuinely pending classes remain.
   const existingAllocData = existingAlloc?.allocation as any;
 
-  const finalO2OCompleted30 = Math.max(completedO2O30, existingAllocData?.oneToOne?.completed30 || 0);
-  const finalO2OCompleted45 = Math.max(completedO2O45, existingAllocData?.oneToOne?.completed45 || 0);
-  const finalO2OCompleted60 = Math.max(completedO2O60, existingAllocData?.oneToOne?.completed60 || 0);
+  // Legacy rows (pre-"alreadyTaken") carried a manual completed count; adopt the excess over the DB count once.
+  const priorOf = (kind: "oneToOne" | "group", m: "30" | "45" | "60", dbCount: number) => {
+    const a = existingAllocData?.[kind];
+    if (a?.[`alreadyTaken${m}`] !== undefined) return Number(a[`alreadyTaken${m}`]) || 0;
+    return Math.max(0, (a?.[`completed${m}`] || 0) - dbCount);
+  };
+  const prior = {
+    o2o30: priorOf("oneToOne", "30", completedO2O30), o2o45: priorOf("oneToOne", "45", completedO2O45), o2o60: priorOf("oneToOne", "60", completedO2O60),
+    grp30: priorOf("group", "30", completedGroup30), grp45: priorOf("group", "45", completedGroup45), grp60: priorOf("group", "60", completedGroup60),
+  };
 
-  const finalGroupCompleted30 = Math.max(completedGroup30, existingAllocData?.group?.completed30 || 0);
-  const finalGroupCompleted45 = Math.max(completedGroup45, existingAllocData?.group?.completed45 || 0);
-  const finalGroupCompleted60 = Math.max(completedGroup60, existingAllocData?.group?.completed60 || 0);
+  const finalO2OCompleted30 = completedO2O30 + prior.o2o30;
+  const finalO2OCompleted45 = completedO2O45 + prior.o2o45;
+  const finalO2OCompleted60 = completedO2O60 + prior.o2o60;
+
+  const finalGroupCompleted30 = completedGroup30 + prior.grp30;
+  const finalGroupCompleted45 = completedGroup45 + prior.grp45;
+  const finalGroupCompleted60 = completedGroup60 + prior.grp60;
 
   const o2oSessions30 = existingAlloc ? (existingAllocData?.oneToOne?.sessions30 || 0) : sessionsO2O30;
   const o2oSessions45 = existingAlloc ? (existingAllocData?.oneToOne?.sessions45 || 0) : sessionsO2O45;
@@ -156,6 +166,9 @@ export async function updateStudentSessionBalances(db: any, studentId: number) {
       sessions30: o2oSessions30,
       sessions45: o2oSessions45,
       sessions60: o2oSessions60,
+      alreadyTaken30: prior.o2o30,
+      alreadyTaken45: prior.o2o45,
+      alreadyTaken60: prior.o2o60,
       completed30: finalO2OCompleted30,
       completed45: finalO2OCompleted45,
       completed60: finalO2OCompleted60,
@@ -170,6 +183,9 @@ export async function updateStudentSessionBalances(db: any, studentId: number) {
       sessions30: groupSessions30,
       sessions45: groupSessions45,
       sessions60: groupSessions60,
+      alreadyTaken30: prior.grp30,
+      alreadyTaken45: prior.grp45,
+      alreadyTaken60: prior.grp60,
       completed30: finalGroupCompleted30,
       completed45: finalGroupCompleted45,
       completed60: finalGroupCompleted60,
