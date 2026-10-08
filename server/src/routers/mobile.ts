@@ -324,6 +324,22 @@ mobileRouter.delete(
 
 // ---- App release / update check (see pypecrm-style OTA update system) ----
 import { appReleaseRouterExpress } from "./appRelease";
+// ---- Teacher reschedule requests (1-to-1) ----
+mobileRouter.post(
+  "/one-to-one/:id/reschedule-request",
+  wrap((c, req) =>
+    c.class.requestReschedule({
+      sessionId: Number(req.params.id),
+      proposedScheduledAt: new Date(req.body.proposedScheduledAt),
+      reason: String(req.body.reason || ""),
+    })
+  )
+);
+mobileRouter.get(
+  "/reschedule-requests",
+  wrap((c, req) => c.class.listRescheduleRequests(req.query.status ? { status: req.query.status as any } : undefined))
+);
+
 // ---- Reports (teachers: own numbers, students: own report; admins/heads are web-only) ----
 mobileRouter.get(
   "/reports/daily",
