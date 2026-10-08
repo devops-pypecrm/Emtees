@@ -324,4 +324,24 @@ mobileRouter.delete(
 
 // ---- App release / update check (see pypecrm-style OTA update system) ----
 import { appReleaseRouterExpress } from "./appRelease";
+// ---- Reports (teachers: own numbers, students: own report; admins/heads are web-only) ----
+mobileRouter.get(
+  "/reports/daily",
+  wrap((c, req) => c.teacherReports.dailyReport({ date: String(req.query.date) }))
+);
+mobileRouter.get(
+  "/reports/range",
+  wrap((c, req) =>
+    c.teacherReports.rangeReport({ startDate: String(req.query.startDate), endDate: String(req.query.endDate) })
+  )
+);
+mobileRouter.get(
+  "/reports/my-salary",
+  wrap((c, req) => c.teacherReports.mySalary(req.query.month ? { month: String(req.query.month) } : undefined))
+);
+mobileRouter.get(
+  "/reports/student/:id",
+  wrap((c, req) => c.teacherReports.studentReport({ studentId: Number(req.params.id) }))
+);
+
 mobileRouter.use("/app-releases", appReleaseRouterExpress);

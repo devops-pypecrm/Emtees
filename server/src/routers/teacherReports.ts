@@ -53,6 +53,7 @@ async function resolveScopedTeachers(db: ReturnType<typeof getDb>, ctx: Ctx): Pr
       .where(eq(departmentTeachers.departmentId, dept.id));
     return rows.map((r) => r.id);
   }
+  if (ctx.user.role === "teacher") return [ctx.user.id]; // teachers only ever see their own numbers
   throw new TRPCError({ code: "FORBIDDEN", message: "Report access denied" });
 }
 
@@ -217,7 +218,9 @@ export const teacherReportsRouter = createRouter({
     .input(z.object({ studentId: z.number() }))
     .query(async ({ input, ctx }) => {
       const db = getDb();
-      const scopedTeachers = await resolveScopedTeachers(db, ctx as Ctx);
+      const isSelf = ctx.user.role === "student";
+      if (isSelf && input.studentId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You can only view your own report" });
+      const scopedTeachers = isSelf ? [] : await resolveScopedTeachers(db, ctx as Ctx);
       const student = await db.query.users.findFirst({ where: and(eq(users.id, input.studentId), eq(users.role, "student")) });
       if (!student) throw new TRPCError({ code: "NOT_FOUND", message: "Student not found" });
 
@@ -227,9 +230,9 @@ export const teacherReportsRouter = createRouter({
       const allocTeacher = Number((alloc?.allocation as any)?.oneToOne?.teacherId) || null;
 
       // Scope: academic heads may only open students taught by their department's teachers
-      if (ctx.user.role === "academic_head") {
+      if (ctx.user.role === "academic_head" || ctx.user.role === "teacher") {
         const inScope = sessions.some((s) => scopedTeachers.includes(s.teacherId)) || (allocTeacher && scopedTeachers.includes(allocTeacher));
-        if (!inScope) throw new TRPCError({ code: "FORBIDDEN", message: "Student is outside your department" });
+        if (!inScope) throw new TRPCError({ code: "FORBIDDEN", message: "Student is outside your scope" });
       }
 
       const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, input.studentId) });
