@@ -3011,7 +3011,7 @@ export const adminRouter = createRouter({
     }),
 
   searchStudents: adminQuery
-    .input(z.object({ search: z.string() }))
+    .input(z.object({ search: z.string(), limit: z.number().int().min(1).max(200).optional() }))
     .query(async ({ input, ctx }) => {
       const db = getDb();
       const query = `%${input.search.trim()}%`;
@@ -3094,7 +3094,8 @@ export const adminRouter = createRouter({
         .from(users)
         .leftJoin(profiles, eq(users.id, profiles.userId))
         .where(and(...filters))
-        .limit(20);
+        .orderBy(users.name)
+        .limit(input.limit ?? 20);
 
       return results;
     }),
