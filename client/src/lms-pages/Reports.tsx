@@ -99,10 +99,14 @@ export default function ReportsPage() {
   const statsQuery = trpc.admin.getDashboardStats.useQuery(undefined, { enabled: isAdmin });
   const studentSearchQuery = trpc.admin.searchStudents.useQuery(
     { search: studentSearch },
-    { enabled: studentSearch.length >= 2 && showStudentDropdown && isAdmin }
+    { enabled: showStudentDropdown && isAdmin }
   );
 
   const batchesQuery = trpc.learning.listBatches.useQuery(undefined, { enabled: isAdmin });
+
+  // Default (no search needed) lists so every report tab shows data immediately
+  const defaultStudentsQuery = trpc.admin.searchStudents.useQuery({ search: "", limit: 50 }, { enabled: isAdmin });
+  const defaultTeachersQuery = trpc.admin.searchTeachers.useQuery({}, { enabled: isAdmin });
 
   const teacherSearchQuery = trpc.admin.searchTeachers.useQuery(
     {
@@ -117,7 +121,7 @@ export default function ReportsPage() {
     {
       search: attendanceTeacherSearch,
     },
-    { enabled: isAdmin && attendanceTeacherSearch.length >= 2 && showAttendanceTeacherDropdown }
+    { enabled: isAdmin && showAttendanceTeacherDropdown }
   );
 
   const studentReport = trpc.admin.getStudentReport.useQuery(
@@ -186,7 +190,7 @@ export default function ReportsPage() {
   // Teacher Student-Wise Report query
   const tswTeacherSearchQuery = trpc.admin.searchTeachers.useQuery(
     { search: tswTeacherSearch },
-    { enabled: isAdmin && tswTeacherSearch.length >= 2 && showTswTeacherDropdown }
+    { enabled: isAdmin && showTswTeacherDropdown }
   );
   const tswReportQuery = trpc.admin.getTeacherStudentWiseReport.useQuery(
     { teacherId: tswTeacherId!, startDate: tswStartDate, endDate: tswEndDate },
@@ -979,14 +983,14 @@ export default function ReportsPage() {
         )}
 
         {/* Empty State */}
-        {!isLoading && !reportData && (
-          <Card className="border border-slate-100 shadow-sm rounded-xl">
-            <CardContent className="py-12 flex flex-col items-center justify-center text-center">
-              <Calendar className="w-12 h-12 text-gray-300 mb-3" />
-              <h3 className="font-semibold text-slate-800 dark:text-slate-200 text-sm">No Teacher Selected</h3>
-              <p className="text-xs text-gray-500 mt-1 max-w-sm">Please search and select a teacher above to generate the attendance report.</p>
-            </CardContent>
-          </Card>
+        {!isLoading && !reportData && !hideTeacherSelect && (
+          <PickTable
+            title="All Teachers"
+            hint="Select a teacher to generate their attendance report."
+            loading={defaultTeachersQuery.isLoading}
+            rows={(defaultTeachersQuery.data ?? []).map((t: any) => ({ id: t.id, name: t.name, code: t.unionId || String(t.id), extra: t.status || "" }))}
+            onPick={(r) => { setAttendanceTeacherId(r.id); setAttendanceTeacherSearch(r.name); setAttendancePage(1); }}
+          />
         )}
 
         {/* Report Content */}
@@ -1376,7 +1380,7 @@ export default function ReportsPage() {
                         </button>
                       )}
                       
-                      {showStudentDropdown && studentSearch.length >= 2 && studentSearchQuery.isLoading && (
+                      {showStudentDropdown && studentSearchQuery.isLoading && (
                         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg p-4 text-center text-sm text-gray-500">
                           Searching...
                         </div>
@@ -1415,6 +1419,26 @@ export default function ReportsPage() {
                       </Button>
                     )}
                   </div>
+
+                  {!studentId && (
+                    <PickTable
+                      className="print-hide"
+                      title="All Students"
+                      hint="Click a student to open their report, or use the search box above."
+                      loading={defaultStudentsQuery.isLoading}
+                      rows={(defaultStudentsQuery.data ?? []).map((st: any) => ({
+                        id: st.id,
+                        name: st.name,
+                        code: st.unionId || st.enrollmentId || String(st.id),
+                        extra: [st.course, st.batch].filter(Boolean).join(" · "),
+                      }))}
+                      onPick={(r) => {
+                        setStudentId(String(r.id));
+                        setStudentSearch(`${r.name} (${r.code})`);
+                        setShowStudentDropdown(false);
+                      }}
+                    />
+                  )}
 
                   {studentReport.isLoading && (
                     <div className="text-center py-12 text-gray-500">Loading student report details...</div>
@@ -3029,7 +3053,13 @@ export default function ReportsPage() {
                 </div>
                 {tswReportQuery.isLoading && <div className="text-center py-12 text-gray-400">Loading...</div>}
                 {!tswTeacherId && !tswReportQuery.isLoading && (
-                  <div className="text-center py-12 text-gray-400">Search and select a teacher to view their student-wise report.</div>
+                  <PickTable
+                    title="All Teachers"
+                    hint="Select a teacher to view their student-wise report."
+                    loading={defaultTeachersQuery.isLoading}
+                    rows={(defaultTeachersQuery.data ?? []).map((t: any) => ({ id: t.id, name: t.name || t.username, code: t.unionId || String(t.id), extra: t.status || "" }))}
+                    onPick={(r) => { setTswTeacherId(r.id); setTswTeacherSearch(r.name); }}
+                  />
                 )}
                 {tswTeacherId && !tswReportQuery.isLoading && tswReportQuery.data && (
                   <Table>
@@ -3414,6 +3444,51 @@ export default function ReportsPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+
+type PickRow = { id: number; name: string; code: string; extra?: string };
+
+/** Default list shown before anything is searched/selected, so report tabs never open empty. */
+function PickTable({ title, hint, rows, loading, onPick, className }: {
+  title: string; hint: string; rows: PickRow[]; loading: boolean; onPick: (r: PickRow) => void; className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="mb-2">
+        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+        <p className="text-xs text-gray-500">{hint}</p>
+      </div>
+      {loading ? (
+        <div className="text-center py-8 text-gray-400 text-sm">Loading...</div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-8 text-gray-400 text-sm">No records found.</div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden bg-white">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50">
+                <TableHead>Name</TableHead>
+                <TableHead>ID</TableHead>
+                <TableHead>Details</TableHead>
+                <TableHead className="w-24" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.id} className="cursor-pointer hover:bg-emerald-50" onClick={() => onPick(r)}>
+                  <TableCell className="font-medium">{r.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-gray-500">{r.code}</TableCell>
+                  <TableCell className="text-xs text-gray-500 capitalize">{r.extra || "-"}</TableCell>
+                  <TableCell><Button size="sm" variant="ghost" type="button">View</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import Feedback from "./lms-pages/Feedback";
 import Performance from "./lms-pages/Performance";
 import Requests from "./lms-pages/Requests";
 import Reports from "./lms-pages/Reports";
+import TeacherReports from "./lms-pages/TeacherReports";
 import Notifications from "./lms-pages/Notifications";
 import Discipline from "./lms-pages/Discipline";
 import Settings from "./lms-pages/Settings";
@@ -123,6 +124,7 @@ export default function App() {
           <Route path="performance" element={<Performance />} />
           <Route path="requests" element={<Requests />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="teacher-reports" element={<TeacherReports />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="discipline" element={<Discipline />} />
           <Route path="settings" element={<Settings />} />

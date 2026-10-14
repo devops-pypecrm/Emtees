@@ -36,6 +36,9 @@ import { sendNotification } from "../lib/notificationEngine";
 import { updateStudentSessionBalances } from "../lib/sessionHelper";
 import { recalculateStudentFees } from "../lib/feeHelper";
 
+// Standard per-class pay (INR) used when a teacher has no explicit salary config.
+export const DEFAULT_CLASS_RATES = { 30: 75, 45: 100, 60: 125 } as const;
+
 export function getDurationCategory(duration: number): 30 | 45 | 60 | null {
   if (duration >= 50 && duration <= 70) return 60;
   if (duration >= 35 && duration <= 55) return 45;
@@ -524,12 +527,12 @@ export async function recalculateSalaryInternal(
   });
 
   const basicSalary = config ? parseFloat(config.basicSalary) : 0;
-  const group30MinRate = config ? parseFloat(config.group30MinRate) : 75;
-  const group45MinRate = config ? parseFloat(config.group45MinRate) : 100;
-  const group60MinRate = config ? parseFloat(config.group60MinRate) : 125;
-  const oneToOne30MinRate = config ? parseFloat(config.oneToOne30MinRate) : 75;
-  const oneToOne45MinRate = config ? parseFloat(config.oneToOne45MinRate) : 100;
-  const oneToOne60MinRate = config ? parseFloat(config.oneToOne60MinRate) : 125;
+  const group30MinRate = config ? parseFloat(config.group30MinRate) : DEFAULT_CLASS_RATES[30];
+  const group45MinRate = config ? parseFloat(config.group45MinRate) : DEFAULT_CLASS_RATES[45];
+  const group60MinRate = config ? parseFloat(config.group60MinRate) : DEFAULT_CLASS_RATES[60];
+  const oneToOne30MinRate = config ? parseFloat(config.oneToOne30MinRate) : DEFAULT_CLASS_RATES[30];
+  const oneToOne45MinRate = config ? parseFloat(config.oneToOne45MinRate) : DEFAULT_CLASS_RATES[45];
+  const oneToOne60MinRate = config ? parseFloat(config.oneToOne60MinRate) : DEFAULT_CLASS_RATES[60];
   // 5. Calculate Total Earnings & Net Salary
   const sessionEarnings =
     (group30Count * group30MinRate) +
@@ -3008,7 +3011,7 @@ export const adminRouter = createRouter({
     }),
 
   searchStudents: adminQuery
-    .input(z.object({ search: z.string() }))
+    .input(z.object({ search: z.string(), limit: z.number().int().min(1).max(200).optional() }))
     .query(async ({ input, ctx }) => {
       const db = getDb();
       const query = `%${input.search.trim()}%`;
@@ -3091,7 +3094,8 @@ export const adminRouter = createRouter({
         .from(users)
         .leftJoin(profiles, eq(users.id, profiles.userId))
         .where(and(...filters))
-        .limit(20);
+        .orderBy(users.name)
+        .limit(input.limit ?? 20);
 
       return results;
     }),
@@ -3861,19 +3865,6 @@ export const adminRouter = createRouter({
     }),
 
   // Daily Report: for a given date, all teachers with their class counts and student counts
-  // Legacy students: classes already taken before the LMS (tracked on WhatsApp).
-  // Only the remaining classes stay pending / payable.
-  setAlreadyTaken: adminQuery
-    .input(z.object({ studentId: z.number(), count: z.number().int().min(0).max(1000) }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, input.studentId) });
-      if (!profile) throw new TRPCError({ code: "NOT_FOUND", message: "Student profile not found" });
-      await db.update(profiles).set({ alreadyTakenSessions: input.count }).where(eq(profiles.userId, input.studentId));
-      await updateStudentSessionBalances(db, input.studentId);
-      return { success: true, alreadyTaken: input.count };
-    }),
-
   getDailyTeacherReport: adminQuery
     .input(z.object({ date: z.string() })) // YYYY-MM-DD
     .query(async ({ input }) => {

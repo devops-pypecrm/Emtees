@@ -1,6 +1,7 @@
 import { eq, and, isNull, isNotNull, lte, gte, lt, ne, gt, inArray, or, desc } from "drizzle-orm";
 import { getDb } from "../queries/connection";
-import { classes, batchEnrollments, payments, oneToOneSessions, profiles, users, batches, modules, classBatches, attendanceAlerts, attendance } from "@db/schema";
+import { classes, batchEnrollments, payments, oneToOneSessions, profiles, users, batches, modules, classBatches, attendanceAlerts, attendance, attendanceEvents } from "@db/schema";
+import { REJOIN_GRACE_MINUTES } from "./classEngine";
 import { sendBulkNotification, sendNotification, getAdminUserIds } from "./notificationEngine";
 import { notifications } from "@db/schema";
 import { NotificationService } from "./notificationService";
@@ -630,148 +631,96 @@ export async function checkExpiryAlerts(): Promise<void> {
   }
 }
 
-const REJOIN_GRACE_MS = 5 * 60 * 1000;
-
-// Finalizes classes whose teacher left and did not rejoin within the 5-minute grace window.
-export async function finalizeDisconnectedSessions(): Promise<void> {
-  const db = getDb();
-  const cutoff = new Date(Date.now() - REJOIN_GRACE_MS);
-  const { attendanceEvents } = await import("@db/schema");
-  const { evaluateClassCompletion } = await import("./classEngine");
-
-  const lastTeacherEventIsLeave = async (where: any, teacherId: number) => {
-    const [last] = await db.select().from(attendanceEvents)
-      .where(and(where, eq(attendanceEvents.userId, teacherId)))
-      .orderBy(desc(attendanceEvents.timestamp)).limit(1);
-    return last && last.eventType === "leave" && last.timestamp <= cutoff ? last.timestamp : null;
-  };
-
-  const ongoingGroup = await db.query.classes.findMany({ where: eq(classes.status, "ongoing") });
-  for (const cls of ongoingGroup) {
-    const leftAt = await lastTeacherEventIsLeave(eq(attendanceEvents.classId, cls.id), cls.teacherId);
-    if (!leftAt) continue;
-    const actualDuration = cls.startedAt ? Math.floor((leftAt.getTime() - new Date(cls.startedAt).getTime()) / 60000) : 0;
-    await db.update(classes).set({ status: "completed", endedAt: leftAt, actualDuration }).where(eq(classes.id, cls.id));
-    await evaluateClassCompletion(cls.id);
-  }
-
-  const ongoingOto = await db.query.oneToOneSessions.findMany({ where: eq(oneToOneSessions.status, "ongoing") });
-  for (const sess of ongoingOto) {
-    const leftAt = await lastTeacherEventIsLeave(eq(attendanceEvents.oneToOneSessionId, sess.id), sess.teacherId);
-    if (!leftAt) continue;
-    const startedAt = sess.startedAt || sess.scheduledAt;
-    const actualDuration = Math.max(0, Math.floor((leftAt.getTime() - new Date(startedAt).getTime()) / 60000));
-    await db.update(oneToOneSessions).set({ status: "completed", endedAt: leftAt, completedAt: leftAt, actualDuration }).where(eq(oneToOneSessions.id, sess.id));
-    await evaluateClassCompletion(undefined, sess.id);
-  }
-
-  const { getIo } = await import("./socketInstance");
-  getIo()?.emit("class:updated");
-}
-
+/**
+ * Finalizes live sessions whose teacher has been gone longer than the rejoin window.
+ *  - 1-to-1: no teacher heartbeat for REJOIN_GRACE_MINUTES, or the teacher's last Jitsi event is a "leave"
+ *    older than the window. A hard 3h fallback still applies.
+ *  - Group: teacher's last Jitsi event is a "leave" older than the window, or 3h fallback.
+ * endedAt is the moment the teacher actually dropped (NOT start + scheduled length), so a session that
+ * dropped before the validity threshold is correctly evaluated as invalid by evaluateClassCompletion.
+ */
 export async function autoEndStaleSessions(): Promise<void> {
   const db = getDb();
   const now = new Date();
-  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+  const graceMs = REJOIN_GRACE_MINUTES * 60 * 1000;
+  const graceCutoff = new Date(now.getTime() - graceMs);
   const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const { evaluateClassCompletion } = await import("./classEngine");
+  const { updateStudentSessionBalances } = await import("./sessionHelper");
+  const { getIo } = await import("./socketInstance");
 
-  // Find 1-to-1 sessions that have been ongoing but have no heartbeat for 5 minutes, 
-  // or have been ongoing for more than 3 hours (fallback)
-  const staleSessions = await db.query.oneToOneSessions.findMany({
-    where: and(
-      eq(oneToOneSessions.status, "ongoing"),
-      or(
-        and(
-          isNotNull(oneToOneSessions.lastHeartbeatAt),
-          lte(oneToOneSessions.lastHeartbeatAt, fiveMinutesAgo)
-        ),
-        lte(oneToOneSessions.startedAt, threeHoursAgo)
-      )
-    )
+  const lastTeacherEvent = async (teacherId: number, classId?: number, sessionId?: number) => {
+    const [ev] = await db.select().from(attendanceEvents)
+      .where(and(
+        classId ? eq(attendanceEvents.classId, classId) : eq(attendanceEvents.oneToOneSessionId, sessionId!),
+        eq(attendanceEvents.userId, teacherId)
+      ))
+      .orderBy(desc(attendanceEvents.timestamp))
+      .limit(1);
+    return ev;
+  };
+
+  const ongoingSessions = await db.query.oneToOneSessions.findMany({
+    where: eq(oneToOneSessions.status, "ongoing"),
   });
 
-  for (const session of staleSessions) {
+  for (const session of ongoingSessions) {
     const startedAt = session.startedAt || session.scheduledAt;
-    const sessionLength = session.sessionLength || 30;
-    
-    // End at its intended duration (prevents 8+ hour actualDurations), but no later
-    // than the teacher's last heartbeat, so a dropped teacher isn't credited the full length
-    const intendedEnd = new Date(startedAt.getTime() + sessionLength * 60000);
-    const endedAt = session.lastHeartbeatAt && session.lastHeartbeatAt < intendedEnd ? session.lastHeartbeatAt : intendedEnd;
-    const endedMins = Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 60000));
+    const lastEv = await lastTeacherEvent(session.teacherId, undefined, session.id);
+    const heartbeat = session.lastHeartbeatAt;
 
-    // Close anyone still "in the room" at that moment
-    {
-      const { attendanceEvents } = await import("@db/schema");
-      const evs = await db.select().from(attendanceEvents)
-        .where(eq(attendanceEvents.oneToOneSessionId, session.id))
-        .orderBy(attendanceEvents.timestamp);
-      const open = new Map<number, string>();
-      for (const e of evs) open.set(e.userId, e.eventType);
-      for (const [uid, last] of open) {
-        if (last === "join") {
-          await db.insert(attendanceEvents).values({
-            oneToOneSessionId: session.id, userId: uid, eventType: "leave", timestamp: endedAt,
-            metadata: { source: "auto-end", reason: "no heartbeat" },
-          });
-        }
-      }
+    let droppedAt: Date | null = null;
+    if (lastEv?.eventType === "leave" && lastEv.timestamp <= graceCutoff) {
+      droppedAt = lastEv.timestamp;
+    } else if (heartbeat && heartbeat <= graceCutoff && !(lastEv?.eventType === "join" && lastEv.timestamp > graceCutoff)) {
+      droppedAt = heartbeat;
+    } else if (startedAt <= threeHoursAgo) {
+      droppedAt = heartbeat || new Date(startedAt.getTime() + (session.sessionLength || 30) * 60000);
     }
+    if (!droppedAt) continue;
+
+    const endedAt = droppedAt;
+    const actualDuration = Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 60000));
 
     await db.update(oneToOneSessions).set({
       status: "completed",
       endedAt,
-      actualDuration: endedMins,
+      actualDuration: Math.max(actualDuration, session.actualDuration || 0),
       completedAt: endedAt,
-      // Default to absent if not marked present (though it should have been set to present when started)
       teacherAttendance: session.teacherAttendance || "present",
-      studentAttendance: session.studentAttendance || "absent"
+      studentAttendance: session.studentAttendance || "absent",
     }).where(eq(oneToOneSessions.id, session.id));
 
-    // Update the student session balance directly
-    const { updateStudentSessionBalances } = await import("./sessionHelper");
-    await updateStudentSessionBalances(db, session.studentId);
-    
-    // Sync attendance to log the actual class
-    const { evaluateClassCompletion } = await import("./classEngine");
     await evaluateClassCompletion(undefined, session.id);
-
-    // Notify clients that the class was ended
-    const { getIo } = await import("./socketInstance");
-    const io = getIo();
-    if (io) {
-      io.emit("class:updated");
-    }
+    await updateStudentSessionBalances(db, session.studentId);
+    getIo()?.emit("class:updated");
   }
 
-  // Find Group classes that have been ongoing for more than 3 hours
-  const staleGroupClasses = await db.query.classes.findMany({
-    where: and(
-      eq(classes.status, "ongoing"),
-      isNotNull(classes.startedAt),
-      lte(classes.startedAt, threeHoursAgo)
-    )
+  const ongoingGroup = await db.query.classes.findMany({
+    where: and(eq(classes.status, "ongoing"), isNotNull(classes.startedAt)),
   });
 
-  for (const cls of staleGroupClasses) {
-    const startedAt = cls.startedAt || cls.scheduledAt;
-    const durationMins = cls.duration || 60; // default 60 mins for group class
-    const endedAt = new Date(startedAt.getTime() + durationMins * 60000);
+  for (const cls of ongoingGroup) {
+    const startedAt = cls.startedAt!;
+    const lastEv = await lastTeacherEvent(cls.teacherId, cls.id);
 
+    let droppedAt: Date | null = null;
+    if (lastEv?.eventType === "leave" && lastEv.timestamp <= graceCutoff) {
+      droppedAt = lastEv.timestamp;
+    } else if (startedAt <= threeHoursAgo) {
+      droppedAt = new Date(startedAt.getTime() + (cls.duration || 60) * 60000);
+    }
+    if (!droppedAt) continue;
+
+    const actualDuration = Math.max(0, Math.floor((droppedAt.getTime() - startedAt.getTime()) / 60000));
     await db.update(classes).set({
       status: "completed",
-      endedAt,
-      actualDuration: durationMins
+      endedAt: droppedAt,
+      actualDuration,
     }).where(eq(classes.id, cls.id));
 
-    const { evaluateClassCompletion } = await import("./classEngine");
     await evaluateClassCompletion(cls.id, undefined);
-
-    const { getIo } = await import("./socketInstance");
-    const io = getIo();
-    if (io) {
-      io.emit("class:updated");
-    }
+    getIo()?.emit("class:updated");
   }
 }
 
@@ -781,7 +730,6 @@ export async function runSchedulerTasks(): Promise<void> {
   await processFeesAndRestrictions();
   // await sendDueDateReminders(); // if exists
   await expireOneToOneSessions();
-  await finalizeDisconnectedSessions();
   await autoEndStaleSessions();
   await cleanupExpiredRecordings();
   await checkStudentConsecutiveAbsences();

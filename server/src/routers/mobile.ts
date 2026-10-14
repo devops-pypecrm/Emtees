@@ -336,6 +336,42 @@ mobileRouter.delete(
 
 // ---- App release / update check (see pypecrm-style OTA update system) ----
 import { appReleaseRouterExpress } from "./appRelease";
+// ---- Teacher reschedule requests (1-to-1) ----
+mobileRouter.post(
+  "/one-to-one/:id/reschedule-request",
+  wrap((c, req) =>
+    c.class.requestReschedule({
+      sessionId: Number(req.params.id),
+      proposedScheduledAt: new Date(req.body.proposedScheduledAt),
+      reason: String(req.body.reason || ""),
+    })
+  )
+);
+mobileRouter.get(
+  "/reschedule-requests",
+  wrap((c, req) => c.class.listRescheduleRequests(req.query.status ? { status: req.query.status as any } : undefined))
+);
+
+// ---- Reports (teachers: own numbers, students: own report; admins/heads are web-only) ----
+mobileRouter.get(
+  "/reports/daily",
+  wrap((c, req) => c.teacherReports.dailyReport({ date: String(req.query.date) }))
+);
+mobileRouter.get(
+  "/reports/range",
+  wrap((c, req) =>
+    c.teacherReports.rangeReport({ startDate: String(req.query.startDate), endDate: String(req.query.endDate) })
+  )
+);
+mobileRouter.get(
+  "/reports/my-salary",
+  wrap((c, req) => c.teacherReports.mySalary(req.query.month ? { month: String(req.query.month) } : undefined))
+);
+mobileRouter.get(
+  "/reports/student/:id",
+  wrap((c, req) => c.teacherReports.studentReport({ studentId: Number(req.params.id) }))
+);
+
 mobileRouter.use("/app-releases", appReleaseRouterExpress);
 
 
@@ -363,188 +399,6 @@ async function reportUser(req: Request, res: Response, allowed: string[]) {
   }
   return user;
 }
-
-type DayRow = { date: string; assigned: number; completed: number; pending: number; ongoing: number; invalid: number; absent: boolean };
-
-// Classifies every non-cancelled class/session of a teacher in [startYmd, endYmd] (IST days) by day.
-async function teacherDays(teacherId: number, startYmd: string, endYmd: string): Promise<DayRow[]> {
-  const db = getDb();
-  const from = istDayStart(startYmd);
-  const to = new Date(istDayStart(endYmd).getTime() + 24 * 3600 * 1000);
-
-  const grp = await db.select({ id: classes.id, status: classes.status, at: classes.scheduledAt })
-    .from(classes)
-    .where(and(eq(classes.teacherId, teacherId), gte(classes.scheduledAt, from), lt(classes.scheduledAt, to), ne(classes.status, "cancelled")));
-  const o2o = await db.select({ id: oneToOneSessions.id, status: oneToOneSessions.status, at: oneToOneSessions.scheduledAt })
-    .from(oneToOneSessions)
-    .where(and(eq(oneToOneSessions.teacherId, teacherId), gte(oneToOneSessions.scheduledAt, from), lt(oneToOneSessions.scheduledAt, to), ne(oneToOneSessions.status, "cancelled")));
-
-  const validGroup = new Set<number>();
-  if (grp.length) {
-    const r = await db.select({ id: classLedgerTransactions.referenceClassId }).from(classLedgerTransactions)
-      .where(and(eq(classLedgerTransactions.type, "debit"), inArray(classLedgerTransactions.referenceClassId, grp.map((g) => g.id))));
-    r.forEach((x) => x.id && validGroup.add(x.id));
-  }
-  const validO2o = new Set<number>();
-  if (o2o.length) {
-    const r = await db.select({ id: classLedgerTransactions.referenceOneToOneId }).from(classLedgerTransactions)
-      .where(and(eq(classLedgerTransactions.type, "debit"), inArray(classLedgerTransactions.referenceOneToOneId, o2o.map((g) => g.id))));
-    r.forEach((x) => x.id && validO2o.add(x.id));
-  }
-
-  const days = new Map<string, DayRow>();
-  for (let t = from.getTime(); t < to.getTime(); t += 24 * 3600 * 1000) {
-    const k = istKey(new Date(t + 12 * 3600 * 1000));
-    days.set(k, { date: k, assigned: 0, completed: 0, pending: 0, ongoing: 0, invalid: 0, absent: false });
-  }
-  const add = (at: Date, status: string, valid: boolean) => {
-    const d = days.get(istKey(at));
-    if (!d) return;
-    d.assigned++;
-    if (status === "completed") valid ? d.completed++ : d.invalid++;
-    else if (status === "ongoing") d.ongoing++;
-    else d.pending++;
-  };
-  grp.forEach((g) => add(g.at, g.status, validGroup.has(g.id)));
-  o2o.forEach((s) => add(s.at, s.status, validO2o.has(s.id)));
-
-  const today = istKey(new Date());
-  for (const d of days.values()) d.absent = d.assigned > 0 && d.date < today && d.completed === 0 && d.ongoing === 0;
-  return Array.from(days.values());
-}
-
-mobileRouter.get("/reports/daily", async (req: Request, res: Response) => {
-  try {
-    const user = await reportUser(req, res, ["teacher"]);
-    if (!user) return;
-    const date = isYmd(req.query.date) ? (req.query.date as string) : istKey(new Date());
-    const [row] = await teacherDays(user.id, date, date);
-    res.json([row]);
-  } catch (err) { handleError(res, err); }
-});
-
-mobileRouter.get("/reports/range", async (req: Request, res: Response) => {
-  try {
-    const user = await reportUser(req, res, ["teacher"]);
-    if (!user) return;
-    if (!isYmd(req.query.startDate) || !isYmd(req.query.endDate)) {
-      return res.status(400).json({ error: "startDate and endDate (YYYY-MM-DD) required", code: "BAD_REQUEST" });
-    }
-    const start = req.query.startDate as string;
-    const end = req.query.endDate as string;
-    if (end < start || (istDayStart(end).getTime() - istDayStart(start).getTime()) / 86400000 > 400) {
-      return res.status(400).json({ error: "Invalid date range", code: "BAD_REQUEST" });
-    }
-    const days = await teacherDays(user.id, start, end);
-
-    // Overall load: each assigned student needs their allocated classes (default 20)
-    const db = getDb();
-    const mine = await db.select({ studentId: oneToOneSessions.studentId, id: oneToOneSessions.id })
-      .from(oneToOneSessions)
-      .where(and(eq(oneToOneSessions.teacherId, user.id), ne(oneToOneSessions.status, "cancelled")));
-    const studentIds = Array.from(new Set(mine.map((m) => m.studentId)));
-    let entitled = 0, alreadyTaken = 0;
-    if (studentIds.length) {
-      const profs = await db.select({ userId: profiles.userId, alloc: profiles.totalAllocatedSessions, taken: profiles.alreadyTakenSessions })
-        .from(profiles).where(inArray(profiles.userId, studentIds));
-      for (const sid of studentIds) {
-        const p = profs.find((x) => x.userId === sid);
-        entitled += p?.alloc && p.alloc > 0 ? p.alloc : 20;
-        alreadyTaken += p?.taken || 0;
-      }
-    }
-    let validAllTime = 0;
-    if (mine.length) {
-      const r = await db.select({ id: classLedgerTransactions.referenceOneToOneId }).from(classLedgerTransactions)
-        .where(and(eq(classLedgerTransactions.type, "debit"), inArray(classLedgerTransactions.referenceOneToOneId, mine.map((m) => m.id))));
-      validAllTime = new Set(r.map((x) => x.id)).size;
-    }
-    const completed = validAllTime + alreadyTaken;
-    res.json([{
-      studentCount: studentIds.length,
-      totalClassesEntitled: entitled,
-      completed,
-      pending: Math.max(entitled - completed, 0),
-      days,
-    }]);
-  } catch (err) { handleError(res, err); }
-});
-
-mobileRouter.get("/reports/my-salary", async (req: Request, res: Response) => {
-  try {
-    const user = await reportUser(req, res, ["teacher"]);
-    if (!user) return;
-    const month = typeof req.query.month === "string" && /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : istKey(new Date()).slice(0, 7);
-    const db = getDb();
-    await recalculateSalaryInternal(db, user.id, month).catch(() => {});
-    const row = await db.query.teacherSalaries.findFirst({ where: and(eq(teacherSalaries.teacherId, user.id), eq(teacherSalaries.month, month)) });
-    res.json({
-      month,
-      classesTaken: (row?.groupClassesCount || 0) + (row?.oneToOneCount || 0),
-      count30: (row?.group30MinCount || 0) + (row?.oneToOne30MinCount || 0),
-      count45: (row?.group45MinCount || 0) + (row?.oneToOne45MinCount || 0),
-      count60: (row?.group60MinCount || 0) + (row?.oneToOne60MinCount || 0),
-      totalAmount: row ? parseFloat(row.totalAmount as any) || 0 : 0,
-    });
-  } catch (err) { handleError(res, err); }
-});
-
-mobileRouter.get("/reports/student/:id", async (req: Request, res: Response) => {
-  try {
-    const user = await reportUser(req, res, ["student", "teacher"]);
-    if (!user) return;
-    const studentId = Number(req.params.id);
-    if (!studentId) return res.status(400).json({ error: "Invalid student", code: "BAD_REQUEST" });
-    const db = getDb();
-    if (user.role === "student" && studentId !== user.id) {
-      return res.status(403).json({ error: "You can only view your own report", code: "FORBIDDEN" });
-    }
-    if (user.role === "teacher") {
-      const link = await db.select({ id: oneToOneSessions.id }).from(oneToOneSessions)
-        .where(and(eq(oneToOneSessions.teacherId, user.id), eq(oneToOneSessions.studentId, studentId))).limit(1);
-      if (!link.length) return res.status(403).json({ error: "Not your student", code: "FORBIDDEN" });
-    }
-    const u = await db.query.users.findFirst({ where: eq(users.id, studentId) });
-    if (!u) return res.status(404).json({ error: "Student not found", code: "NOT_FOUND" });
-    const prof = await db.query.profiles.findFirst({ where: eq(profiles.userId, studentId) });
-
-    const debits = await db.select({ amount: classLedgerTransactions.amount, o2o: classLedgerTransactions.referenceOneToOneId, cls: classLedgerTransactions.referenceClassId })
-      .from(classLedgerTransactions).where(and(eq(classLedgerTransactions.studentId, studentId), eq(classLedgerTransactions.type, "debit")));
-    const completedInLms = debits.reduce((n, d) => n + (Number(d.amount) || 1), 0);
-    const alreadyTaken = prof?.alreadyTakenSessions || 0;
-    const allocated = prof?.totalAllocatedSessions && prof.totalAllocatedSessions > 0 ? prof.totalAllocatedSessions : 20;
-    const validO2o = new Set(debits.map((d) => d.o2o).filter(Boolean));
-    const validCls = new Set(debits.map((d) => d.cls).filter(Boolean));
-
-    const o2o = await db.select().from(oneToOneSessions).where(eq(oneToOneSessions.studentId, studentId))
-      .orderBy(desc(oneToOneSessions.scheduledAt)).limit(60);
-    const grp = await db.select({ classId: attendance.classId, at: classes.scheduledAt, len: classes.duration, dur: attendance.duration, st: classes.status })
-      .from(attendance).innerJoin(classes, eq(attendance.classId, classes.id))
-      .where(eq(attendance.studentId, studentId)).orderBy(desc(classes.scheduledAt)).limit(60);
-
-    const sessions = [
-      ...o2o.filter((s) => s.status !== "cancelled").map((s) => ({
-        scheduledAt: s.scheduledAt, sessionLength: s.sessionLength, actualDuration: s.actualDuration, status: s.status,
-        valid: s.status === "completed" ? validO2o.has(s.id) : null, type: "one_to_one",
-      })),
-      ...grp.map((g) => ({
-        scheduledAt: g.at, sessionLength: g.len, actualDuration: g.dur, status: g.st,
-        valid: g.st === "completed" ? validCls.has(g.classId as number) : null, type: "group",
-      })),
-    ].sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
-
-    res.json({
-      name: u.name,
-      isActive: u.status === "active",
-      totalCompleted: completedInLms + alreadyTaken,
-      totalRemaining: Math.max(allocated - completedInLms - alreadyTaken, 0),
-      completedInLms,
-      alreadyTaken,
-      sessions,
-    });
-  } catch (err) { handleError(res, err); }
-});
-
 
 // ───────────── Per-session report (teacher) ─────────────
 
