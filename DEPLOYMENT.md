@@ -1,58 +1,40 @@
-# Emtees Backend EC2 Deployment Guide
+# Emtees Deployment Guide (AWS EC2)
 
-This document contains the step-by-step instructions to deploy or update the Emtees backend application on the AWS EC2 instance.
+This is the only supported way to deploy the backend **and** the web app: one script.
 
-## 1. Local Packaging
+## 1. Deploy
 
-The deployment archive MUST include both the `server/` and `contracts/` directories (the backend relies on shared types and validation from the contracts workspace). 
-
-Run the automated script to generate the archive:
-```bash
-./deploy-pack.sh
-```
-This produces `emtees-deploy-new.tar.gz`.
-
-## 2. Transfer Archive to EC2
-
-Transfer the newly created archive to your EC2 instance using SCP and your private key (`emtees.pem`):
-```bash
-scp -i ~/Downloads/emtees.pem emtees-deploy-new.tar.gz ubuntu@13.235.19.185:~
-```
-
-## 3. SSH into the Server
-
-Connect to the EC2 instance to execute the deployment:
-```bash
-ssh -i ~/Downloads/emtees.pem ubuntu@13.235.19.185
-```
-
-## 4. Install & Build (On EC2)
-
-Once logged into the EC2 instance, follow these steps to extract, install, and build the code:
+From the repo root, in a terminal that has `ssh`, `scp` and `tar` (macOS/Linux, or Git Bash on Windows):
 
 ```bash
-# Extract the archive into the deployment directory
-tar -xzf emtees-deploy-new.tar.gz -C ~/emtees-api
-
-# Navigate to the server workspace
-cd ~/emtees-api/server
-
-# Install ALL dependencies (Dev dependencies are required for TypeScript and workspace linking)
-npm install
-
-# Build the TypeScript code
-npm run build
+./deploy.sh
 ```
 
-## 5. Restart PM2
+It will:
+1. Build the server (`npm run build --workspace=server`) and the web client (`npm run build --workspace=client`).
+2. Package the server (`src`, `db`, `dist`, `package.json`, `tsconfig.json`) and `contracts/` into `server-dist.tar.gz`,
+   and the web build into `client-dist.tar.gz`.
+3. Upload both to the EC2 server (`scp -i <key> ... ubuntu@<server IP>`).
+4. On the server: extract the server over `/home/ubuntu/emtees-api`, run `npm install`, replace the web files in
+   `/var/www/emtees/client/dist` (served by nginx), and `pm2 restart emtees-api`.
 
-The application is managed using PM2. To restart the process and apply the new build:
+Things to know:
+- **`.env` is not uploaded.** The server keeps its own `/home/ubuntu/emtees-api/server/.env`; edit it by SSH only,
+  then `pm2 restart emtees-api --update-env`.
+- **`global-bundle.pem`** (RDS certificate) lives on the server in `/home/ubuntu/emtees-api/server/` and is not
+  overwritten by a deploy. Keep it there.
+- The SSH key path (`-i`) and the server IP are set in `deploy.sh` — edit them for your machine. The server IP
+  changes if the EC2 instance is stopped and started (assign an Elastic IP to stop this).
+- Database migrations in `server/db/apply-migrations.ts` run automatically every time the API starts.
+
+## 2. Verify after deploying
 
 ```bash
-pm2 restart emtees-api
+ssh -i <key> ubuntu@<server IP> "pm2 list; pm2 logs emtees-api --lines 30 --nostream"
 ```
+You should see `Server is running and ready on http://localhost:3000`. Then open https://gecouncil.com.
 
-### Useful PM2 Commands
+## 3. Useful PM2 commands (on the server)
 
 - **View Logs:** Check real-time logs for errors or startup issues.
   ```bash

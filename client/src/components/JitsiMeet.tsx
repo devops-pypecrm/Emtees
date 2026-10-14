@@ -44,6 +44,17 @@ export default function JitsiMeet({
   const handleLeaveRef = useRef<((eventName: string) => Promise<void>) | null>(null);
 
   const trackHeartbeat = trpc.class.trackOneToOneHeartbeat.useMutation();
+  // Tell the server when this user actually enters / leaves the call (feeds attendance + reports)
+  const reportPresence = trpc.class.reportPresence.useMutation();
+  const presenceJoinedRef = useRef(false);
+  const sendPresence = (eventType: "join" | "leave") => {
+    if (eventType === "join" && presenceJoinedRef.current) return;
+    if (eventType === "leave" && !presenceJoinedRef.current) return;
+    presenceJoinedRef.current = eventType === "join";
+    reportPresence.mutate(
+      isOneToOne ? { sessionId: classId, eventType } : { classId, eventType }
+    );
+  };
 
   const isModerator = user?.role === "super_admin" || user?.role === "teacher";
 
@@ -151,6 +162,16 @@ export default function JitsiMeet({
 
     return () => clearInterval(interval);
   }, [apiReady, isOneToOne, classId]);
+
+  // If the component is torn down without the Jitsi leave events firing, still record the leave
+  useEffect(() => {
+    return () => {
+      if (presenceJoinedRef.current) {
+        presenceJoinedRef.current = false;
+        reportPresence.mutate(isOneToOne ? { sessionId: classId, eventType: "leave" } : { classId, eventType: "leave" });
+      }
+    };
+  }, []);
 
   // Force close from parent (e.g. backend auto-closer)
   useEffect(() => {
@@ -431,6 +452,7 @@ export default function JitsiMeet({
               const handleLeave = async (eventName: string) => {
                 if (leaving) return;
                 leaving = true;
+                sendPresence("leave");
                 if (onLeave) {
                   try {
                     await onLeave(eventName);
@@ -447,6 +469,7 @@ export default function JitsiMeet({
               externalApi.addEventListener("videoConferenceDestroyed", () => handleLeave("videoConferenceDestroyed"));
 
               externalApi.addEventListener("videoConferenceJoined", () => {
+                sendPresence("join");
                 if (onJoin) onJoin();
               });
             }}

@@ -6,7 +6,7 @@ import { NotificationService } from "./notificationService";
 
 async function getClassDurationThreshold(db: ReturnType<typeof getDb>): Promise<number> {
   const setting = await db.query.systemSettings.findFirst({ where: eq(systemSettings.key, "class_duration_threshold") });
-  return setting ? parseInt(setting.value) || 25 : 25;
+  return setting ? parseInt(setting.value) || 20 : 20;
 }
 
 export async function evaluateClassCompletion(classId?: number, oneToOneSessionId?: number) {
@@ -63,6 +63,13 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
     const diffMs = classEndTime.getTime() - activeSessions[uid].getTime();
     const diffMins = diffMs / 60000;
     userDurations[uid] = (userDurations[uid] || 0) + diffMins;
+  }
+
+  // Fallback for 1-to-1: if a participant's client never reported join/leave,
+  // use the per-minute heartbeat counters kept on the session itself.
+  if (isOneToOne) {
+    if (!userDurations[cls.teacherId] && cls.teacherDuration > 0) userDurations[cls.teacherId] = cls.teacherDuration;
+    if (!userDurations[cls.studentId] && cls.studentDuration > 0) userDurations[cls.studentId] = cls.studentDuration;
   }
 
   // 3. Determine if teacher met the configurable duration threshold

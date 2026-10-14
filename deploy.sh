@@ -15,8 +15,6 @@ tar -czf server-dist.tar.gz \
   server/dist/ \
   server/package.json \
   server/tsconfig.json \
-  server/.env \
-  server/global-bundle.pem \
   contracts/
 
 echo "=== Packaging client ==="
@@ -24,11 +22,11 @@ rm -f client-dist.tar.gz
 tar -czf client-dist.tar.gz client/dist/
 
 echo "=== Uploading to AWS ==="
-scp -i ~/Downloads/emtees.pem -o StrictHostKeyChecking=no server-dist.tar.gz ubuntu@13.235.19.185:~
-scp -i ~/Downloads/emtees.pem -o StrictHostKeyChecking=no client-dist.tar.gz ubuntu@13.235.19.185:~
+scp -i ~/Projects/Emtees/emtees.pem -o StrictHostKeyChecking=no server-dist.tar.gz ubuntu@13.235.121.148:~
+scp -i ~/Projects/Emtees/emtees.pem -o StrictHostKeyChecking=no client-dist.tar.gz ubuntu@13.235.121.148:~
 
 echo "=== Deploying on AWS ==="
-ssh -i ~/Downloads/emtees.pem -o StrictHostKeyChecking=no ubuntu@13.235.19.185 << 'REMOTE'
+ssh -i ~/Projects/Emtees/emtees.pem -o StrictHostKeyChecking=no ubuntu@13.235.121.148 << 'REMOTE'
   # Extract server (preserve existing node_modules)
   cd /home/ubuntu/emtees-api
   tar -xzf ~/server-dist.tar.gz

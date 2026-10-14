@@ -524,12 +524,12 @@ export async function recalculateSalaryInternal(
   });
 
   const basicSalary = config ? parseFloat(config.basicSalary) : 0;
-  const group30MinRate = config ? parseFloat(config.group30MinRate) : 0;
-  const group45MinRate = config ? parseFloat(config.group45MinRate) : 0;
-  const group60MinRate = config ? parseFloat(config.group60MinRate) : 0;
-  const oneToOne30MinRate = config ? parseFloat(config.oneToOne30MinRate) : 0;
-  const oneToOne45MinRate = config ? parseFloat(config.oneToOne45MinRate) : 0;
-  const oneToOne60MinRate = config ? parseFloat(config.oneToOne60MinRate) : 0;
+  const group30MinRate = config ? parseFloat(config.group30MinRate) : 75;
+  const group45MinRate = config ? parseFloat(config.group45MinRate) : 100;
+  const group60MinRate = config ? parseFloat(config.group60MinRate) : 125;
+  const oneToOne30MinRate = config ? parseFloat(config.oneToOne30MinRate) : 75;
+  const oneToOne45MinRate = config ? parseFloat(config.oneToOne45MinRate) : 100;
+  const oneToOne60MinRate = config ? parseFloat(config.oneToOne60MinRate) : 125;
   // 5. Calculate Total Earnings & Net Salary
   const sessionEarnings =
     (group30Count * group30MinRate) +
@@ -2414,7 +2414,7 @@ export const adminRouter = createRouter({
     });
     const map = new Map(settingsList.map((s) => [s.key, s.value]));
     return {
-      class_duration_threshold: parseInt(map.get("class_duration_threshold") || "25", 10),
+      class_duration_threshold: parseInt(map.get("class_duration_threshold") || "20", 10),
       absent_consecutive_threshold: parseInt(map.get("absent_consecutive_threshold") || "7", 10),
     };
   }),
@@ -3861,6 +3861,19 @@ export const adminRouter = createRouter({
     }),
 
   // Daily Report: for a given date, all teachers with their class counts and student counts
+  // Legacy students: classes already taken before the LMS (tracked on WhatsApp).
+  // Only the remaining classes stay pending / payable.
+  setAlreadyTaken: adminQuery
+    .input(z.object({ studentId: z.number(), count: z.number().int().min(0).max(1000) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, input.studentId) });
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND", message: "Student profile not found" });
+      await db.update(profiles).set({ alreadyTakenSessions: input.count }).where(eq(profiles.userId, input.studentId));
+      await updateStudentSessionBalances(db, input.studentId);
+      return { success: true, alreadyTaken: input.count };
+    }),
+
   getDailyTeacherReport: adminQuery
     .input(z.object({ date: z.string() })) // YYYY-MM-DD
     .query(async ({ input }) => {

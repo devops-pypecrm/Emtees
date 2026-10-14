@@ -14,7 +14,8 @@ export async function generateJitsiToken(params: {
     aud: "jitsi",
     iss: params.appId,
     sub: "meet.gecouncil.com",
-    room: params.room,
+    // Jitsi lowercases room names; a mixed-case claim would fail token validation
+    room: params.room.toLowerCase(),
     context: {
       user: {
         name: params.userName,

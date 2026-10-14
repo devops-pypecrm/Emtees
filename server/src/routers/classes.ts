@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import crypto from "crypto";
 import { createRouter, authedQuery, adminQuery, teacherQuery } from "../middleware";
 import { getDb } from "../queries/connection";
-import { classes, attendance, oneToOneSessions, batchEnrollments, batches, profiles, users, classBatches, classJoinRequests, attendanceAlerts, oneToOneRescheduleRequests, notifications, studentClassAllocations, holidays, modules, classLedgerTransactions, systemSettings, departments, departmentTeachers } from "@db/schema";
+import { attendanceEvents, classes, attendance, oneToOneSessions, batchEnrollments, batches, profiles, users, classBatches, classJoinRequests, attendanceAlerts, oneToOneRescheduleRequests, notifications, studentClassAllocations, holidays, modules, classLedgerTransactions, systemSettings, departments, departmentTeachers } from "@db/schema";
 import { sendBulkNotification, sendNotification, getAdminUserIds } from "../lib/notificationEngine";
 import { getIo } from "../lib/socketInstance";
 import { isStudentFeeRestricted } from "../lib/feeHelper";
@@ -650,6 +650,13 @@ export const classRouter = createRouter({
         for (const bid of classBatchIds) {
           io.to(`batch:${bid}`).emit("class:started", {
             batchId: bid,
+            classId: input.id,
+            title: cls.title,
+          });
+        }
+        // Ring each enrolled student directly (apps don't join batch rooms)
+        for (const sid of studentIds) {
+          io.to(`user:${sid}`).emit("class:started", {
             classId: input.id,
             title: cls.title,
           });
@@ -1494,6 +1501,7 @@ export const classRouter = createRouter({
         status: "ongoing",
         lastHeartbeatAt: new Date(),
       };
+      if (!session.startedAt) updateData.startedAt = new Date();
 
       if (isTeacher) {
         updateData.teacherAttendance = "present";
@@ -1597,8 +1605,6 @@ export const classRouter = createRouter({
         });
       }
 
-      console.log("[joinOneToOne] Generated JWT:", jwt);
-
       return {
         sessionId: session.id,
         roomName,
@@ -1647,6 +1653,95 @@ export const classRouter = createRouter({
         .where(eq(oneToOneSessions.id, input.sessionId));
 
       return { success: true };
+    }),
+
+  // Clients (web + mobile app) report when they actually enter / leave the
+  // Jitsi room. The Jitsi server does not send webhooks, so this is what feeds
+  // evaluateClassCompletion with each person's real time in the call.
+  reportPresence: authedQuery
+    .input(z.object({
+      classId: z.number().optional(),
+      sessionId: z.number().optional(),
+      eventType: z.enum(["join", "leave"]),
+    }).refine((v) => !!v.classId !== !!v.sessionId, { message: "Provide exactly one of classId or sessionId" }))
+    .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      const userId = ctx.user.id;
+      const now = new Date();
+
+      let teacherId: number;
+      let studentId: number | null = null;
+      if (input.sessionId) {
+        const session = await db.query.oneToOneSessions.findFirst({ where: eq(oneToOneSessions.id, input.sessionId) });
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+        teacherId = session.teacherId;
+        studentId = session.studentId;
+        if (userId !== teacherId && userId !== studentId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Not a participant of this session" });
+        }
+      } else {
+        const cls = await db.query.classes.findFirst({ where: eq(classes.id, input.classId!) });
+        if (!cls) throw new TRPCError({ code: "NOT_FOUND", message: "Class not found" });
+        teacherId = cls.teacherId;
+        if (userId !== teacherId) {
+          if (ctx.user.role !== "student") {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Not a participant of this class" });
+          }
+          const cbList = await db.select({ batchId: classBatches.batchId }).from(classBatches).where(eq(classBatches.classId, cls.id));
+          const classBatchIds = Array.from(new Set([cls.batchId, ...cbList.map((x) => x.batchId)].filter(Boolean))) as number[];
+          const enrollment = await db.query.batchEnrollments.findFirst({
+            where: and(
+              inArray(batchEnrollments.batchId, classBatchIds),
+              eq(batchEnrollments.studentId, userId),
+              or(eq(batchEnrollments.status, "active"), eq(batchEnrollments.status, "restricted"))
+            ),
+          });
+          if (!enrollment) throw new TRPCError({ code: "FORBIDDEN", message: "Not enrolled in this class" });
+        }
+      }
+
+      // De-duplicate: ignore a join while already joined, or a leave while not joined
+      const refCond = input.sessionId
+        ? eq(attendanceEvents.oneToOneSessionId, input.sessionId)
+        : eq(attendanceEvents.classId, input.classId!);
+      const [last] = await db.select().from(attendanceEvents)
+        .where(and(refCond, eq(attendanceEvents.userId, userId)))
+        .orderBy(desc(attendanceEvents.timestamp)).limit(1);
+      if (input.eventType === "join" && last?.eventType === "join") return { success: true, recorded: false };
+      if (input.eventType === "leave" && last?.eventType !== "join") return { success: true, recorded: false };
+
+      await db.insert(attendanceEvents).values({
+        classId: input.classId ?? null,
+        oneToOneSessionId: input.sessionId ?? null,
+        userId,
+        eventType: input.eventType,
+        timestamp: now,
+        metadata: { source: "client", role: ctx.user.role },
+      });
+
+      // Teacher entering the room starts the class (same as the Jitsi webhook used to)
+      if (input.eventType === "join") {
+        if (input.sessionId) {
+          if (userId === teacherId) {
+            const sess = await db.query.oneToOneSessions.findFirst({ where: eq(oneToOneSessions.id, input.sessionId) });
+            await db.update(oneToOneSessions).set({
+              status: "ongoing",
+              teacherAttendance: "present",
+              ...(sess?.startedAt ? {} : { startedAt: now }),
+            }).where(eq(oneToOneSessions.id, input.sessionId));
+          } else {
+            await db.update(oneToOneSessions).set({ studentAttendance: "present" }).where(eq(oneToOneSessions.id, input.sessionId));
+          }
+        } else if (userId === teacherId) {
+          const cls = await db.query.classes.findFirst({ where: eq(classes.id, input.classId!) });
+          await db.update(classes).set({
+            status: "ongoing",
+            ...(cls?.startedAt ? {} : { startedAt: now }),
+          }).where(eq(classes.id, input.classId!));
+        }
+      }
+
+      return { success: true, recorded: true };
     }),
 
   endOneToOne: authedQuery
@@ -1713,7 +1808,7 @@ export const classRouter = createRouter({
 
       let valid = false;
       if (sessionLength === 30) {
-        valid = dur >= 25 && dur <= 40;
+        valid = dur >= 20 && dur <= 40;
       } else if (sessionLength === 45) {
         valid = dur >= 35 && dur <= 60;
       } else {

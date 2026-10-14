@@ -694,13 +694,34 @@ export async function autoEndStaleSessions(): Promise<void> {
     const startedAt = session.startedAt || session.scheduledAt;
     const sessionLength = session.sessionLength || 30;
     
-    // Auto-end it exactly at its intended duration to prevent bizarre 8+ hour actualDurations
-    const endedAt = new Date(startedAt.getTime() + sessionLength * 60000);
+    // End at its intended duration (prevents 8+ hour actualDurations), but no later
+    // than the teacher's last heartbeat, so a dropped teacher isn't credited the full length
+    const intendedEnd = new Date(startedAt.getTime() + sessionLength * 60000);
+    const endedAt = session.lastHeartbeatAt && session.lastHeartbeatAt < intendedEnd ? session.lastHeartbeatAt : intendedEnd;
+    const endedMins = Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 60000));
+
+    // Close anyone still "in the room" at that moment
+    {
+      const { attendanceEvents } = await import("@db/schema");
+      const evs = await db.select().from(attendanceEvents)
+        .where(eq(attendanceEvents.oneToOneSessionId, session.id))
+        .orderBy(attendanceEvents.timestamp);
+      const open = new Map<number, string>();
+      for (const e of evs) open.set(e.userId, e.eventType);
+      for (const [uid, last] of open) {
+        if (last === "join") {
+          await db.insert(attendanceEvents).values({
+            oneToOneSessionId: session.id, userId: uid, eventType: "leave", timestamp: endedAt,
+            metadata: { source: "auto-end", reason: "no heartbeat" },
+          });
+        }
+      }
+    }
 
     await db.update(oneToOneSessions).set({
       status: "completed",
       endedAt,
-      actualDuration: sessionLength,
+      actualDuration: endedMins,
       completedAt: endedAt,
       // Default to absent if not marked present (though it should have been set to present when started)
       teacherAttendance: session.teacherAttendance || "present",

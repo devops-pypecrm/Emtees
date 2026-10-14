@@ -9,7 +9,7 @@ See also: [docs/APP_ARCHITECTURE.md](docs/APP_ARCHITECTURE.md) for the full mobi
 - Monorepo, npm workspaces: `client` (React 19 + Vite SPA), `server` (Express + tRPC + Drizzle/Postgres), `contracts` (shared Zod validation/types, NOT a workspace — imported by path).
 - Node version: **v24** (server `@types/node ^24.10.1`; EC2 confirmed running v24.19.0 via NVM). Client's `@types/node ^26.2.0` is just a types-package mismatch, not a runtime requirement — don't chase it.
 - Live video: self-hosted Jitsi at `meet.gecouncil.com` (not meet.jit.si). Realtime: socket.io. Payments: Razorpay (student-facing). Email: nodemailer/SMTP (no-ops silently if `SMTP_HOST` unset). SMS/WhatsApp: stubbed, not wired to a real provider.
-- Production infra: single EC2 instance (`13.235.19.185`), PM2 process named `emtees-api`, Nginx reverse-proxying to `localhost:3000`, static client served by Nginx directly from a dist folder (not through Node).
+- Production infra: single EC2 instance (`13.235.121.148`), PM2 process named `emtees-api`, Nginx reverse-proxying to `localhost:3000`, static client served by Nginx directly from a dist folder (not through Node).
 - DB migrations: Drizzle Kit, versioned SQL files in `server/db/migrations/` (`0000_init.sql` ... `0009_first_stardust.sql` as of 2026-09-24). Production requires SSL via `server/global-bundle.pem` (AWS RDS CA cert) when `NODE_ENV=production` — this file must always be present in `server/` on EC2, it is not committed to git (check `.gitignore`) and must be part of every deploy package.
 - `emtees.pem` (SSH key to the EC2 box) currently sits **untracked** at the repo root (`git status` shows it untracked) — do not `git add` it. Treat it as a secret; if it should live elsewhere, move it out of the repo rather than leaving it here relying on gitignore.
 
@@ -53,20 +53,20 @@ npm run db:seed               # tsx db/seed.ts — dev/staging only
 
 ## 4. Deploying / updating the live server — canonical procedure
 
-There are **four overlapping scripts** in the repo root (`deploy-pack.sh`, `deploy.sh`, `run_deploy.sh`, `run_deploy_client.sh`) with inconsistent targets (different remote paths, different start commands — one even runs `pm2 start npm -- run dev` against raw TS instead of the built `dist/`). **Use the documented flow below as canonical.** Treat the other three scripts as legacy/unverified until someone reconciles them — don't mix and match.
+The old overlapping scripts (`deploy-pack.sh`, `run_deploy.sh`, `run_deploy_client.sh`) have been **removed**. `deploy.sh` is the single deploy script — see `DEPLOYMENT.md`.
 
 ### 4.1 Canonical backend update (per `DEPLOYMENT.md`)
 
 ```bash
 # 1. Package (from repo root) — bundles server/ + contracts/
-./deploy-pack.sh
+./deploy.sh
 # produces emtees-deploy-new.tar.gz
 
 # 2. Ship it
-scp -i ~/Downloads/emtees.pem emtees-deploy-new.tar.gz ubuntu@13.235.19.185:~
+scp -i ~/Downloads/emtees.pem emtees-deploy-new.tar.gz ubuntu@13.235.121.148:~
 
 # 3. SSH in
-ssh -i ~/Downloads/emtees.pem ubuntu@13.235.19.185
+ssh -i ~/Downloads/emtees.pem ubuntu@13.235.121.148
 
 # 4. On the EC2 box:
 tar -xzf emtees-deploy-new.tar.gz -C ~/emtees-api
@@ -83,7 +83,7 @@ Verify `server/global-bundle.pem` exists in `~/emtees-api/server/` after extract
 
 ### 4.2 Client (frontend) update
 
-Not documented in `DEPLOYMENT.md` — inferred from `deploy.sh`: build `client/`, ship `client/dist/` to the Nginx-served static path. **Before running this, confirm the actual Nginx `root` directive on the EC2 box** — `deploy.sh` targets `/var/www/emtees/client/dist` while `run_deploy_client.sh` targets `/home/ubuntu/frontend-dist/`; only one of these is real. Resolve this discrepancy once (check Nginx config on the server) and update this section with the confirmed path.
+Not documented in `DEPLOYMENT.md` — inferred from `deploy.sh`: build `client/`, ship `client/dist/` to the Nginx-served static path. The web files are served from `/var/www/emtees/client/dist` (confirmed in production); `deploy.sh` updates it.
 
 ```bash
 cd client && npm run build        # -> client/dist/

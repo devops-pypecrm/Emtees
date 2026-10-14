@@ -147,6 +147,8 @@ export const profiles = pgTable(
     remainingOneToOneSessions: integer("remaining_one_to_one_sessions").default(0).notNull(),
     remainingGroupSessions: integer("remaining_group_sessions").default(0).notNull(),
     totalRemainingSessions: integer("total_remaining_sessions").default(0).notNull(),
+    // Classes taken before the LMS (tracked manually on WhatsApp); only the rest are payable/pending
+    alreadyTakenSessions: integer("already_taken_sessions").default(0).notNull(),
     documents: json("documents").default([]),
     gender: varchar("gender", { length: 50 }),
     dob: timestamp("dob"),

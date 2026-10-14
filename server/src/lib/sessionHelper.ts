@@ -32,7 +32,7 @@ export async function updateStudentSessionBalances(db: any, studentId: number) {
       and(
         eq(oneToOneSessions.studentId, studentId),
         eq(oneToOneSessions.status, "completed"),
-        sql`(${oneToOneSessions.actualDuration} IS NULL OR ${oneToOneSessions.actualDuration} >= 25)`
+        sql`(${oneToOneSessions.actualDuration} IS NULL OR ${oneToOneSessions.actualDuration} >= 20)`
       )
     )
     .groupBy(oneToOneSessions.sessionLength);
@@ -195,11 +195,13 @@ export async function updateStudentSessionBalances(db: any, studentId: number) {
   const totalAllocatedGroup = sessionsGroup30 + sessionsGroup45 + sessionsGroup60;
   const totalAllocated = totalAllocatedO2O + totalAllocatedGroup;
 
-  const totalAttendedO2O = completedO2O30 + completedO2O45 + completedO2O60;
+  // Classes already taken before the LMS (tracked manually) count as attended; only the rest remain
+  const alreadyTaken = profile.alreadyTakenSessions || 0;
+  const totalAttendedO2O = completedO2O30 + completedO2O45 + completedO2O60 + alreadyTaken;
   const totalAttendedGroup = completedGroup30 + completedGroup45 + completedGroup60;
   const totalAttended = totalAttendedO2O + totalAttendedGroup;
 
-  const totalRemainingO2O = remainingO2O30 + remainingO2O45 + remainingO2O60;
+  const totalRemainingO2O = Math.max(0, remainingO2O30 + remainingO2O45 + remainingO2O60 - alreadyTaken);
   const totalRemainingGroup = remainingGroup30 + remainingGroup45 + remainingGroup60;
   const totalRemaining = totalRemainingO2O + totalRemainingGroup;
 

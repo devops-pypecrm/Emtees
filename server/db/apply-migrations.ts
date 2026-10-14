@@ -313,6 +313,9 @@ export async function applyMigrations() {
     await client.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "department" varchar(255);`);
     await client.query(`ALTER TABLE "profiles" ADD COLUMN IF NOT EXISTS "department" varchar(255);`);
 
+    console.log("Adding already_taken_sessions to profiles...");
+    await client.query(`ALTER TABLE "profiles" ADD COLUMN IF NOT EXISTS "already_taken_sessions" integer NOT NULL DEFAULT 0;`);
+
     console.log("Creating holidays table...");
     await client.query(`
       CREATE TABLE IF NOT EXISTS "holidays" (
