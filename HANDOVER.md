@@ -146,16 +146,24 @@ bucket (30 / 45 / 60 min) and applies the rates from `teacher_salary_configs`. I
 row, it falls back to ₹75 / ₹100 / ₹125. Admins set rates in the web portal (Salaries → Teacher Rates).
 
 ### "Already taken" (legacy students)
-Older students whose attendance was tracked on WhatsApp have `profiles.already_taken_sessions`. It reduces
-their pending 1-to-1 classes (`server/src/lib/sessionHelper.ts`). The backend mutation exists
-(`admin.setAlreadyTaken`); **there is no web form to enter it yet** (see [pending work](#12-known-issues-and-pending-work)).
+Older students whose attendance was tracked on WhatsApp get their pre-LMS counts stored per duration
+(`alreadyTaken30/45/60`, for 1-to-1 and group) inside `student_class_allocations`. They are **added** to the
+sessions recorded in the LMS (`server/src/lib/sessionHelper.ts`), so only the genuinely pending classes remain.
+The admin mutation is `teacherReports.setAlreadyTaken` (`server/src/routers/teacherReports.ts`);
+**no web form calls it yet** (see [pending work](#12-known-issues-and-pending-work)).
 
 ### Reports
-- **Web:** `Reports` page (Student, Teacher, Teacher Attendance, Class, Workload, Teacher Student-Wise, Daily).
-  Admins see everything; academic heads are meant to see only their department's teachers.
-- **Mobile:** teachers get *My Reports* (Today, Sessions, Date range, Salary); students get *My Class Report*.
-  These are the REST endpoints at the bottom of `server/src/routers/mobile.ts` (`/reports/...`). Admin and
-  academic-head reports are intentionally **web-only**.
+- **Web, admins and academic heads:** the **Teacher Reports** page (`/teacher-reports`,
+  `client/src/lms-pages/TeacherReports.tsx`): per-teacher daily completed / pending / invalid, date-range
+  filter, salary summary and a student drill-down. Admins see every teacher; an **academic head sees only the
+  teachers of their own department** (enforced on the server in `teacherReports.ts`). These reports are
+  refused from the mobile app on purpose.
+- **Web, general:** the older **Reports** page (Student, Teacher, Teacher Attendance, Class, Workload,
+  Teacher Student-Wise, Daily).
+- **Mobile:** teachers get *My Reports* (Today, Sessions, Date range, Salary) and students get *My Class
+  Report*. Today / Date range / Salary / Student come from `teacherReports` via `/api/mobile/reports/...`;
+  the **Sessions** tab (per-session minutes and join/leave times) is `/api/mobile/reports/sessions` in
+  `server/src/routers/mobile.ts`.
 
 ### Scheduler
 `server/src/lib/scheduler.ts` runs inside the API process every 60 s: class reminders, fee reminders and
@@ -254,17 +262,19 @@ sudo tail -n 40 /var/log/jitsi/jicofo.log
    in the security group (`sudo timeout 15 tcpdump -ni ens5 udp port 10000 -c 20` during a call shows packets
    if it is), CPU/memory under load (`top`, `free -m`), and the EC2 instance type (burstable `t*` types slow
    down when CPU credits run out).
-3. **"Already taken" web form** for legacy students (backend field exists).
+3. **"Already taken" web form** for legacy students (the backend mutation `teacherReports.setAlreadyTaken` exists).
 4. **Set `RELEASE_PUBLISH_SECRET`** on the server.
 5. **Elastic IP** for the server.
 6. **Group classes:** there is no per-minute fallback like 1-to-1 has; a student whose phone crashes without
    reporting "left" is counted as present until the teacher leaves.
 7. **Old data:** past classes have no join/leave rows, so their reports show no times.
-8. **Academic head scoping** (only their department's teachers on every report tab) is implemented in many
-   endpoints but was not re-verified across all tabs.
-9. **Cleanup:** `server/db/manual_session_backfill.ts` is a one-off script used to hand-enter one session;
+8. **Academic head scoping** is enforced in `teacherReports.ts`; it has not been exercised with a real
+   academic-head login yet.
+9. **This merged code is on GitHub `main` but was not redeployed** after the merge; the live server still runs
+   the previous build. Deploy with `./deploy.sh` and re-test.
+10. **Cleanup:** `server/db/manual_session_backfill.ts` is a one-off script used to hand-enter one session;
    delete it from the repo and the server. Old build archives (`*.tar.gz`) were removed from Git.
-10. Incoming-call prompts only show while the student's app is open. Ringing a closed app needs push
+11. Incoming-call prompts only show while the student's app is open. Ringing a closed app needs push
     notifications (Firebase) — not built.
 
 ## 13. Security checklist for the new owner
