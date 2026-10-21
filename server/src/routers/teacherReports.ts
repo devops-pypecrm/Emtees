@@ -267,7 +267,7 @@ export const teacherReportsRouter = createRouter({
           .slice(0, 100)
           .map((s) => ({
             id: s.id, teacherId: s.teacherId, scheduledAt: s.scheduledAt, status: s.status,
-            sessionLength: s.sessionLength, actualDuration: s.actualDuration,
+            sessionLength: s.sessionLength, actualDuration: s.studentDuration || s.actualDuration, // minutes this student actually attended
             valid: s.status === "completed" ? validIds.has(s.id) : null,
           })),
       };

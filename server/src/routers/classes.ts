@@ -1636,7 +1636,8 @@ export const classRouter = createRouter({
         updateData.lastHeartbeatAt = new Date();
       }
 
-      if (input.bothPresent) {
+      // Count class time once per minute (teacher's heartbeat only); counting both sides doubled it
+      if (input.bothPresent && ctx.user.role !== "student") {
         updateData.actualDuration = sql`COALESCE(${oneToOneSessions.actualDuration}, 0) + 1`;
       }
 

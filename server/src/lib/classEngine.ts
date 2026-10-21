@@ -210,6 +210,9 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
     await db.update(oneToOneSessions).set({
       teacherDuration: Math.floor(teacherDuration),
       studentDuration: Math.floor(userDurations[cls.studentId] || 0),
+      // The heartbeat counter double-counts (teacher + student each add 1/min); the real class
+      // length is the teacher's time in the call.
+      actualDuration: Math.floor(teacherDuration),
     }).where(eq(oneToOneSessions.id, oneToOneSessionId!));
   }
 
