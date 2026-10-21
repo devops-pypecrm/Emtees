@@ -211,6 +211,9 @@ slow the API too.
 
 ## 9. Deploying
 
+> Moving to a new server? See [`SERVER_MIGRATION.md`](SERVER_MIGRATION.md) (full inventory of the current server and a step-by-step migration/cutover plan).
+
+
 From the repo root in **Git Bash** (or macOS/Linux terminal), with the SSH key at the path used inside
 `deploy.sh` (edit the `-i` path if yours differs):
 
