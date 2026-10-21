@@ -1,4 +1,4 @@
-const url = "http://13.235.121.148/api/trpc";
+const url = "http://52.66.45.63/api/trpc";
 
 async function run() {
   // 1. Create a student via registerStudentWithReferral

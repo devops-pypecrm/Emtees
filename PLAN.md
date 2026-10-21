@@ -9,7 +9,7 @@ See also: [docs/APP_ARCHITECTURE.md](docs/APP_ARCHITECTURE.md) for the full mobi
 - Monorepo, npm workspaces: `client` (React 19 + Vite SPA), `server` (Express + tRPC + Drizzle/Postgres), `contracts` (shared Zod validation/types, NOT a workspace — imported by path).
 - Node version: **v24** (server `@types/node ^24.10.1`; EC2 confirmed running v24.19.0 via NVM). Client's `@types/node ^26.2.0` is just a types-package mismatch, not a runtime requirement — don't chase it.
 - Live video: self-hosted Jitsi at `meet.gecouncil.com` (not meet.jit.si). Realtime: socket.io. Payments: Razorpay (student-facing). Email: nodemailer/SMTP (no-ops silently if `SMTP_HOST` unset). SMS/WhatsApp: stubbed, not wired to a real provider.
-- Production infra: single EC2 instance (`13.235.121.148`), PM2 process named `emtees-api`, Nginx reverse-proxying to `localhost:3000`, static client served by Nginx directly from a dist folder (not through Node).
+- Production infra: single EC2 instance (`52.66.45.63`), PM2 process named `emtees-api`, Nginx reverse-proxying to `localhost:3000`, static client served by Nginx directly from a dist folder (not through Node).
 - DB migrations: Drizzle Kit, versioned SQL files in `server/db/migrations/` (`0000_init.sql` ... `0009_first_stardust.sql` as of 2026-09-24). Production requires SSL via `server/global-bundle.pem` (AWS RDS CA cert) when `NODE_ENV=production` — this file must always be present in `server/` on EC2, it is not committed to git (check `.gitignore`) and must be part of every deploy package.
 - `emtees.pem` (SSH key to the EC2 box) currently sits **untracked** at the repo root (`git status` shows it untracked) — do not `git add` it. Treat it as a secret; if it should live elsewhere, move it out of the repo rather than leaving it here relying on gitignore.
 
@@ -63,10 +63,10 @@ The old overlapping scripts (`deploy-pack.sh`, `run_deploy.sh`, `run_deploy_clie
 # produces emtees-deploy-new.tar.gz
 
 # 2. Ship it
-scp -i ~/Downloads/emtees.pem emtees-deploy-new.tar.gz ubuntu@13.235.121.148:~
+scp -i ~/Downloads/emtees.pem emtees-deploy-new.tar.gz ubuntu@52.66.45.63:~
 
 # 3. SSH in
-ssh -i ~/Downloads/emtees.pem ubuntu@13.235.121.148
+ssh -i ~/Downloads/emtees.pem ubuntu@52.66.45.63
 
 # 4. On the EC2 box:
 tar -xzf emtees-deploy-new.tar.gz -C ~/emtees-api

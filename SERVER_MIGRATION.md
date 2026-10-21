@@ -8,10 +8,10 @@ Use it to build a new server (target: `t4g.medium`) and move production to it wi
 
 ---
 
-## 0. Status of the new server (updated 2026-10-21)
+## 0. Status of the new server (updated 2026-10-21 after cutover)
 
 New instance: `t4g.medium`, ARM64, hostname `ip-172-31-23-74` (private `172.31.23.74`), public `52.66.45.63`.
-**Built and tested, but not live: DNS still points to the old server.**
+**LIVE since 2026-10-21 ~13:10 IST: DNS points to this server and the old server's API is stopped (old server kept running as a fallback).**
 
 Done and verified on the new server:
 - Node 24.19.0 (arm64), pm2, nginx, certbot, 2 GB swap.
@@ -33,7 +33,9 @@ Differences from the plan above that were found while doing it:
 - `certbot renew --dry-run` fails until DNS points at the new server (expected); re-run it right after cutover.
 - Package versions on the new server are slightly newer than the old one (jitsi-meet 2.0.11248, JVB 2.3-318, Jicofo 1.0-1205).
 
-Still to do at cutover (see section 8): remove `DISABLE_SCHEDULER=1` from the new `.env` and restart, stop the old API,
+Cutover was completed on 2026-10-21 (DNS changed, `DISABLE_SCHEDULER` removed on the new server, API stopped on the old one,
+verification passed incl. certificate renewal dry-run). Rollback = point both A records back to `13.235.121.148` and run
+`pm2 start emtees-api` on the old server (stop it on the new one). Original cutover steps, for reference (see section 8): remove `DISABLE_SCHEDULER=1` from the new `.env` and restart, stop the old API,
 change the GoDaddy A records for `gecouncil.com` and `meet.gecouncil.com`, then run the verification checklist (section 9).
 Confirm that `52.66.45.63` is an **Elastic IP**; if it is not, allocate one and re-run the `jvb.conf` address step.
 

@@ -199,7 +199,7 @@ All live in `server/.env` (values only in the private bundle):
 
 | Item | Value |
 |---|---|
-| Server | AWS EC2, Ubuntu, user `ubuntu`, IP **13.235.121.148** (changes if the instance is stopped/started — see Elastic IP below) |
+| Server | AWS EC2, Ubuntu, user `ubuntu`, IP **52.66.45.63** (changes if the instance is stopped/started — see Elastic IP below) |
 | Domains | `gecouncil.com` (web + API) and `meet.gecouncil.com` (Jitsi) both point to that IP |
 | API process | `pm2` process **`emtees-api`**, folder `/home/ubuntu/emtees-api/server` |
 | Web files | `/var/www/emtees/client/dist` (served by nginx) |
@@ -226,7 +226,7 @@ restarts `emtees-api`. Important facts:
 
 - `deploy.sh` does **not** upload `.env`. The server keeps its own `.env`; change it by SSH only.
 - The server applies small database migrations itself on every start (`apply-migrations.ts`).
-- Check after deploying: `ssh -i emtees.pem ubuntu@13.235.121.148 "pm2 logs emtees-api --lines 30 --nostream"`.
+- Check after deploying: `ssh -i emtees.pem ubuntu@52.66.45.63 "pm2 logs emtees-api --lines 30 --nostream"`.
 - `deploy.sh` is the only deploy script (the older `run_deploy*.sh` / `deploy-pack.sh` variants were removed).
 - If the server's IP changed, update the IP inside the scripts and `DEPLOYMENT.md`.
 
@@ -248,7 +248,7 @@ Installed from the Jitsi Debian packages (not Docker). Services: `prosody`, `jic
 ## 11. Operations cheat sheet
 
 ```bash
-ssh -i emtees.pem ubuntu@13.235.121.148
+ssh -i emtees.pem ubuntu@52.66.45.63
 pm2 list                                    # is emtees-api online?
 pm2 logs emtees-api --lines 50 --nostream   # recent logs
 pm2 restart emtees-api --update-env         # restart (re-read .env)
