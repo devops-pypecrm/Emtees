@@ -737,6 +737,12 @@ export async function runSchedulerTasks(): Promise<void> {
 }
 
 export function startScheduler(): void {
+  // Set DISABLE_SCHEDULER=1 on a standby/test server that shares the database with the live one,
+  // so the two never run the background jobs (reminders, auto-end, salary) at the same time.
+  if (process.env.DISABLE_SCHEDULER === "1") {
+    console.log("[scheduler] DISABLED by DISABLE_SCHEDULER=1");
+    return;
+  }
   setInterval(async () => {
     try {
       await runSchedulerTasks();

@@ -8,6 +8,35 @@ Use it to build a new server (target: `t4g.medium`) and move production to it wi
 
 ---
 
+## 0. Status of the new server (updated 2026-10-21)
+
+New instance: `t4g.medium`, ARM64, hostname `ip-172-31-23-74` (private `172.31.23.74`), public `52.66.45.63`.
+**Built and tested, but not live: DNS still points to the old server.**
+
+Done and verified on the new server:
+- Node 24.19.0 (arm64), pm2, nginx, certbot, 2 GB swap.
+- Backend deployed with `EMTEES_HOST=52.66.45.63 ./deploy.sh`; `emtees-api` is running and connected to the database.
+  **`DISABLE_SCHEDULER=1` is set in its `.env`**, so it does not run background jobs while the old server is still live.
+- nginx site `emtees` with the copied Let's Encrypt certificates; tested through the real domain with
+  `curl --resolve gecouncil.com:443:52.66.45.63 ...` (web 200, API ok, app APK download ok).
+- Jitsi installed (all packages exist for ARM64): JWT login with App ID `emtees` and the same secret as the backend
+  (compared by fingerprint), nginx site created from the package template, certificate links created, the video
+  bridge registered with Jicofo with no health failures, `statichost` set to private `172.31.23.74` / public `52.66.45.63`,
+  TCP fallback port 4443, heaps limited to 1024 MB (bridge) and 512 MB (Jicofo), and `single-participant-timeout: 120 minutes`.
+
+Differences from the plan above that were found while doing it:
+- The Jitsi installer did **not** create its nginx site or the `/etc/jitsi/meet/*.crt|key` links, even with "own
+  certificate" preseeded. They were created by hand from `/usr/share/jitsi-meet-web-config/jitsi-meet.example`
+  (the same steps the installer's script performs).
+- Memory limits are read from `VIDEOBRIDGE_MAX_MEMORY` (in `/etc/jitsi/videobridge/config`) and `JICOFO_MAX_MEMORY`
+  (in `/etc/jitsi/jicofo/config`); both confirmed to take effect.
+- `certbot renew --dry-run` fails until DNS points at the new server (expected); re-run it right after cutover.
+- Package versions on the new server are slightly newer than the old one (jitsi-meet 2.0.11248, JVB 2.3-318, Jicofo 1.0-1205).
+
+Still to do at cutover (see section 8): remove `DISABLE_SCHEDULER=1` from the new `.env` and restart, stop the old API,
+change the GoDaddy A records for `gecouncil.com` and `meet.gecouncil.com`, then run the verification checklist (section 9).
+Confirm that `52.66.45.63` is an **Elastic IP**; if it is not, allocate one and re-run the `jvb.conf` address step.
+
 ## 1. What runs on the current server
 
 One EC2 machine runs **everything**:
@@ -95,7 +124,7 @@ database. Check in the AWS console: RDS → `emteesapp` → Connectivity → VPC
 Set shell variables on your Mac to keep the commands short:
 ```bash
 export OLD=13.235.121.148
-export NEW=<new Elastic IP>
+export NEW=52.66.45.63
 export KEY=~/Projects/Emtees/emtees.pem
 ```
 
@@ -128,8 +157,7 @@ ssh -i $KEY ubuntu@$OLD 'ls -t ~/emtees-api/server/storage/app-releases | head -
 ssh -i $KEY ubuntu@$NEW 'mkdir -p ~/emtees-api/server/storage/app-releases'
 scp -3 -i $KEY ubuntu@$OLD:~/emtees-api/server/storage/app-releases/<that file> ubuntu@$NEW:~/emtees-api/server/storage/app-releases/
 ```
-Deploy the code with the normal script, pointed at the new IP. **Edit the IP inside `deploy.sh`** (all `13.235.121.148`
-→ `$NEW`) and run `./deploy.sh`. (Better: replace the IP in `deploy.sh` with the domain `gecouncil.com`, so it never needs editing
+Deploy the code with the normal script, pointed at the new IP. **Run `EMTEES_HOST=$NEW ./deploy.sh`** (it reads the target from `EMTEES_HOST` and defaults to `gecouncil.com`). (Better: replace the IP in `deploy.sh` with the domain `gecouncil.com`, so it never needs editing
 again.) The first run will fail at the final `pm2 restart emtees-api` because the process does not exist yet; that is
 expected. Then on the new server:
 ```bash

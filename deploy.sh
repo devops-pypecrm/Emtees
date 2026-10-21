@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Target server and SSH key. Defaults to the domain (so after a server move it needs no edit).
+# Override for a specific machine:  EMTEES_HOST=52.66.45.63 ./deploy.sh
+HOST="${EMTEES_HOST:-gecouncil.com}"
+KEY="${EMTEES_KEY:-$HOME/Projects/Emtees/emtees.pem}"
+SSH_OPTS="-i $KEY -o StrictHostKeyChecking=accept-new"
+
 echo "=== Building server ==="
 npm run build --workspace=server
 
@@ -22,11 +28,14 @@ rm -f client-dist.tar.gz
 tar -czf client-dist.tar.gz client/dist/
 
 echo "=== Uploading to AWS ==="
-scp -i ~/Projects/Emtees/emtees.pem -o StrictHostKeyChecking=no server-dist.tar.gz ubuntu@13.235.121.148:~
-scp -i ~/Projects/Emtees/emtees.pem -o StrictHostKeyChecking=no client-dist.tar.gz ubuntu@13.235.121.148:~
+scp $SSH_OPTS server-dist.tar.gz ubuntu@$HOST:~
+scp $SSH_OPTS client-dist.tar.gz ubuntu@$HOST:~
 
 echo "=== Deploying on AWS ==="
-ssh -i ~/Projects/Emtees/emtees.pem -o StrictHostKeyChecking=no ubuntu@13.235.121.148 << 'REMOTE'
+ssh $SSH_OPTS ubuntu@$HOST << 'REMOTE'
+  # Load Node/pm2 when they come from nvm (non-interactive shells skip .bashrc)
+  [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh"
+
   # Extract server (preserve existing node_modules)
   cd /home/ubuntu/emtees-api
   tar -xzf ~/server-dist.tar.gz
@@ -43,9 +52,9 @@ ssh -i ~/Projects/Emtees/emtees.pem -o StrictHostKeyChecking=no ubuntu@13.235.12
   sudo chown -R www-data:www-data /var/www/emtees/client/dist
   rm -rf /tmp/client
 
-  # Restart server
-  pm2 restart emtees-api
+  # Restart server (first deploy on a new machine: start it)
+  pm2 restart emtees-api --update-env || (cd /home/ubuntu/emtees-api/server && pm2 start npm --name emtees-api -- run dev)
   pm2 save
 REMOTE
 
-echo "=== Deploy complete! ==="
+echo "=== Deploy complete! ($HOST) ==="
