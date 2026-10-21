@@ -175,8 +175,8 @@ The server stores the latest Android APK and serves it at `GET /api/mobile/app-r
 `/download/mobile`. Publishing is `POST /api/mobile/app-releases/publish` (multipart: `platform`, `versionName`,
 `versionCode`, `releaseNotes`, `apk`). The APK file is stored under `server/storage/app-releases/` on the
 server. See the app's own handover for the publish script.
-**Open risk:** the publish endpoint is protected only if `RELEASE_PUBLISH_SECRET` is set in the server's
-`.env` — it is currently **not set**, so anyone who finds the URL could publish a release. Set it.
+The publish endpoint is protected by `RELEASE_PUBLISH_SECRET` in the server's `.env` (set on 2026-10-21). The app's
+`scripts/publish_release.sh` reads it over SSH; never commit or share it.
 
 ## 7. Environment variables
 
@@ -266,7 +266,7 @@ sudo tail -n 40 /var/log/jitsi/jicofo.log
    if it is), CPU/memory under load (`top`, `free -m`), and the EC2 instance type (burstable `t*` types slow
    down when CPU credits run out).
 3. **"Already taken" web form** for legacy students (the backend mutation `teacherReports.setAlreadyTaken` exists).
-4. **Set `RELEASE_PUBLISH_SECRET`** on the server.
+4. ~~Set `RELEASE_PUBLISH_SECRET`~~ (done 2026-10-21).
 5. **Elastic IP** for the server.
 6. **Group classes:** there is no per-minute fallback like 1-to-1 has; a student whose phone crashes without
    reporting "left" is counted as present until the teacher leaves.

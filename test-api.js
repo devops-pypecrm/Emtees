@@ -1,4 +1,4 @@
-const url = "http://52.66.45.63/api/trpc";
+const url = "https://gecouncil.com/api/trpc";
 
 async function run() {
   // 1. Create a student via registerStudentWithReferral

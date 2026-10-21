@@ -31,7 +31,7 @@ Copy each file to the matching place INSIDE the cloned Emtees repo:
       Public AWS RDS certificate. Only needed when connecting to the AWS database.
 
   server-access/emtees.pem     ->  keep somewhere safe, e.g. C:\Users\<you>\.ssh\emtees.pem
-      SSH key for the production server (ubuntu@13.235.121.148). Anyone with this
+      SSH key for the production server (ubuntu@gecouncil.com (52.66.45.63)). Anyone with this
       file can log in to the live server. Share it only if needed, and delete it
       after the handover.
 

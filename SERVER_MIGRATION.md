@@ -296,7 +296,7 @@ Do this at a quiet time (no live classes).
 
 ## 10. After the move
 
-1. Set `RELEASE_PUBLISH_SECRET` in the new server's `.env` and `pm2 restart emtees-api --update-env`; then `scripts/publish_release.sh` in the app repo works.
+1. ~~Set `RELEASE_PUBLISH_SECRET`~~ — done on 2026-10-21; the app repo's `scripts/publish_release.sh` is tested against the new server.
 2. Update the server IP in the docs/scripts (`deploy.sh`, `DEPLOYMENT.md`, `HANDOVER.md`, the app's `scripts/publish_release.sh`) — or better, switch them to `gecouncil.com`.
 3. Create an **AMI snapshot** of the new server, and add a CloudWatch alarm on **CPU credit balance** (`CPUCreditBalance`) so you see it before video slows.
 4. Rotate the secrets you shared with the colleague (database password, `APP_SECRET`, SMTP, Razorpay, Jitsi secret, SSH key).
