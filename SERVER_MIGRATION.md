@@ -88,6 +88,10 @@ database. Check in the AWS console: RDS → `emteesapp` → Connectivity → VPC
 3. After it starts: **Associate** the Elastic IP with it.
 4. Keep the old instance **running and untouched** (do not stop it: its IP would change and you would lose the rollback).
 
+> **zsh tip (macOS):** paste commands without `#` comment lines (zsh rejects them in the terminal) and replace every
+> `<placeholder>` with a real value first. Set the variables below in the **same** terminal window before running any
+> command that uses `$KEY`, `$OLD` or `$NEW`, or the commands will fail with errors like "Identity file ubuntu@ not accessible".
+
 Set shell variables on your Mac to keep the commands short:
 ```bash
 export OLD=13.235.121.148
