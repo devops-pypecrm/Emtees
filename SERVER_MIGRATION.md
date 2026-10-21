@@ -78,7 +78,10 @@ database. Check in the AWS console: RDS → `emteesapp` → Connectivity → VPC
    - Name `emtees-prod-2`; AMI **Ubuntu Server (64-bit Arm)** — use the same Ubuntu release as now (26.04) if offered, otherwise
      24.04 LTS; type **t4g.medium**.
    - Key pair: the **same key pair** you use for `emtees.pem` (so the same key logs in).
-   - Network: VPC `vpc-0fadd55460d96e8b0`, subnet `subnet-0cd03bec1b9da90ce` (same AZ `ap-south-1a`).
+   - Network: VPC `vpc-0fadd55460d96e8b0`. **Any Availability Zone works** (security groups and the RDS access are VPC-wide).
+     On 2026-10-21 `t4g.medium` had no capacity in `ap-south-1a` (the old server's zone), so choose a subnet in
+     **`ap-south-1b` or `ap-south-1c`** (Network settings → Edit → Subnet). Do not pick "no preference": that can land in a
+     different VPC without database access. Set *Auto-assign public IP* = Enable (the Elastic IP replaces it afterwards).
    - Security groups: choose **existing** `launch-wizard-1` **and** `ec2-rds-1` (this copies all the open ports and the
      database access). Make sure UDP **10000** is open from anywhere; restrict SSH (22) to your own IP.
    - Storage: 30 GB gp3.
