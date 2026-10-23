@@ -7,6 +7,7 @@ import { and, eq, gte, lt, inArray, ne, desc } from "drizzle-orm";
 import { getDb } from "../queries/connection";
 import { classes, oneToOneSessions, classLedgerTransactions, profiles, users, teacherSalaries, attendance, attendanceEvents } from "@db/schema";
 import { recalculateSalaryInternal } from "./admin";
+import { computeParticipantMinutes, oneToOneMinutes, wholeMinutes } from "../lib/sessionMinutes";
 
 // Plain REST/JSON wrapper around the tRPC router, for the Flutter mobile app
 // (which can't speak tRPC's superjson wire format). Each route builds a
@@ -402,25 +403,6 @@ async function reportUser(req: Request, res: Response, allowed: string[]) {
 
 // ───────────── Per-session report (teacher) ─────────────
 
-// Pairs join/leave events into minutes per user; anyone still "in" is counted until endAt.
-function minutesByUser(evs: { userId: number; eventType: string; timestamp: Date }[], endAt: Date) {
-  const total: Record<number, number> = {};
-  const open: Record<number, Date> = {};
-  for (const e of evs) {
-    if (e.eventType === "join") { if (!open[e.userId]) open[e.userId] = e.timestamp; }
-    else if (open[e.userId]) {
-      total[e.userId] = (total[e.userId] || 0) + (e.timestamp.getTime() - open[e.userId].getTime()) / 60000;
-      delete open[e.userId];
-    }
-  }
-  for (const uid of Object.keys(open)) {
-    const id = Number(uid);
-    total[id] = (total[id] || 0) + Math.max(0, endAt.getTime() - open[id].getTime()) / 60000;
-  }
-  for (const k of Object.keys(total)) total[Number(k)] = Math.round(total[Number(k)] * 10) / 10;
-  return total;
-}
-
 async function buildSessionRows(teacherId: number, from: Date, to: Date, only?: { type: string; id: number }) {
   const db = getDb();
   const o2oWhere = [eq(oneToOneSessions.teacherId, teacherId), ne(oneToOneSessions.status, "cancelled")];
@@ -453,9 +435,7 @@ async function buildSessionRows(teacherId: number, from: Date, to: Date, only?: 
   const rows: any[] = [];
   for (const s of o2o) {
     const evs = evO.filter((e) => e.oneToOneSessionId === s.id);
-    const mins = minutesByUser(evs, s.endedAt || s.completedAt || now);
-    const tMin = mins[s.teacherId] ?? (s.teacherDuration || 0);
-    const stMin = mins[s.studentId] ?? (s.studentDuration || 0);
+    const { teacher: tMin, student: stMin } = oneToOneMinutes(s, evs);
     const a = attO.find((x) => x.oneToOneSessionId === s.id);
     rows.push({
       type: "one_to_one", id: s.id, title: s.title, scheduledAt: s.scheduledAt, sessionLength: s.sessionLength, status: s.status,
@@ -467,12 +447,12 @@ async function buildSessionRows(teacherId: number, from: Date, to: Date, only?: 
   }
   for (const c of grp) {
     const evs = evG.filter((e) => e.classId === c.id);
-    const mins = minutesByUser(evs, c.endedAt || now);
+    const mins = computeParticipantMinutes(evs, c.endedAt || now);
     const atts = attG.filter((a) => a.classId === c.id);
     rows.push({
       type: "group", id: c.id, title: c.title, scheduledAt: c.scheduledAt, sessionLength: c.duration, status: c.status,
       valid: c.status === "completed" ? validG.has(c.id) : null,
-      teacherMinutes: mins[c.teacherId] ?? 0,
+      teacherMinutes: wholeMinutes(mins[c.teacherId]),
       students: atts.map((a) => ({ id: a.studentId, name: nameOf(a.studentId), minutes: mins[a.studentId] ?? (a.duration || 0), attendance: a.status })),
       events: evs.map((e) => ({ name: e.userId === c.teacherId ? "Teacher" : nameOf(e.userId), eventType: e.eventType, timestamp: e.timestamp })),
     });

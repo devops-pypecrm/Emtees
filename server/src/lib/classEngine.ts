@@ -3,11 +3,12 @@ import { getDb } from "../queries/connection";
 import { attendanceEvents, attendance, classLedgerTransactions, classes, users, profiles, batches, batchEnrollments, classBatches, systemSettings, oneToOneSessions } from "@db/schema";
 import { recalculateSalaryInternal } from "../routers/admin";
 import { NotificationService } from "./notificationService";
+import { computeParticipantMinutes, REJOIN_GRACE_MINUTES as SHARED_REJOIN_GRACE_MINUTES } from "./sessionMinutes";
 
 // A class counts only if both parties stayed at least this many minutes (set to 20 by the owner).
 export const DEFAULT_CLASS_DURATION_THRESHOLD = 20;
 // A dropped participant has this long to rejoin and continue "seamlessly".
-export const REJOIN_GRACE_MINUTES = 5;
+export const REJOIN_GRACE_MINUTES = SHARED_REJOIN_GRACE_MINUTES;
 
 async function getClassDurationThreshold(db: ReturnType<typeof getDb>): Promise<number> {
   const setting = await db.query.systemSettings.findFirst({ where: eq(systemSettings.key, "class_duration_threshold") });
@@ -42,41 +43,9 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
 
   const events = await db.select().from(attendanceEvents).where(eventsQuery).orderBy(attendanceEvents.timestamp);
   
-  // Calculate duration per user. A rejoin within REJOIN_GRACE_MINUTES of a drop
-  // bridges the gap (counted as attended) so a network blip doesn't invalidate the class.
-  const userDurations: Record<number, number> = {};
-  const activeSessions: Record<number, Date> = {};
-  const lastLeave: Record<number, Date> = {};
-
-  for (const event of events) {
-    const uid = event.userId;
-    if (event.eventType === "join") {
-      if (!activeSessions[uid]) {
-        activeSessions[uid] = event.timestamp;
-        const prevLeave = lastLeave[uid];
-        if (prevLeave) {
-          const gapMins = (event.timestamp.getTime() - prevLeave.getTime()) / 60000;
-          if (gapMins <= REJOIN_GRACE_MINUTES) {
-            userDurations[uid] = (userDurations[uid] || 0) + gapMins;
-          }
-        }
-      }
-    } else if (event.eventType === "leave") {
-      if (activeSessions[uid]) {
-        const diffMins = (event.timestamp.getTime() - activeSessions[uid].getTime()) / 60000;
-        userDurations[uid] = (userDurations[uid] || 0) + diffMins;
-        delete activeSessions[uid]; // End this session block
-        lastLeave[uid] = event.timestamp;
-      }
-    }
-  }
-
-  // If the class ended, anyone still "active" gets duration calculated until class endedAt (or now)
+  // Minutes per person: the same shared calculation every report screen uses (see lib/sessionMinutes.ts).
   const classEndTime = cls.endedAt || cls.completedAt || new Date();
-  for (const uid in activeSessions) {
-    const diffMins = (classEndTime.getTime() - activeSessions[uid].getTime()) / 60000;
-    userDurations[uid] = (userDurations[uid] || 0) + diffMins;
-  }
+  const userDurations: Record<number, number> = computeParticipantMinutes(events, classEndTime);
 
   // Fallback for 1-to-1: when the Jitsi webhook never delivered events (misconfigured / blocked),
   // use the minute-by-minute heartbeat counters recorded by the client apps.

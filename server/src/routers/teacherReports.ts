@@ -16,6 +16,7 @@ import {
 } from "@db/schema";
 import { recalculateSalaryInternal } from "./admin";
 import { updateStudentSessionBalances } from "../lib/sessionHelper";
+import { loadOneToOneEvents, oneToOneMinutes } from "../lib/sessionMinutes";
 
 // Each 1-to-1 student is entitled to this many classes (e.g. 10 students => 200 classes).
 export const CLASSES_PER_STUDENT = 20;
@@ -246,6 +247,12 @@ export const teacherReportsRouter = createRouter({
       const a = (alloc?.allocation as any)?.oneToOne || {};
       const alreadyTaken = (a.alreadyTaken30 || 0) + (a.alreadyTaken45 || 0) + (a.alreadyTaken60 || 0);
 
+      const shown = sessions
+        .sort((x, y) => y.scheduledAt.getTime() - x.scheduledAt.getTime())
+        .slice(0, 100);
+      // Same minutes calculation as the teacher's Sessions report, so both screens always agree
+      const eventsBySession = await loadOneToOneEvents(db, shown.map((s) => s.id));
+
       const isActive = student.status === "active";
       return {
         studentId: student.id,
@@ -262,14 +269,16 @@ export const teacherReportsRouter = createRouter({
         totalCompleted: completed + alreadyTaken,
         invalid,
         pending,
-        sessions: sessions
-          .sort((x, y) => y.scheduledAt.getTime() - x.scheduledAt.getTime())
-          .slice(0, 100)
-          .map((s) => ({
+        sessions: shown.map((s) => {
+          const m = oneToOneMinutes(s, eventsBySession.get(s.id));
+          return {
             id: s.id, teacherId: s.teacherId, scheduledAt: s.scheduledAt, status: s.status,
-            sessionLength: s.sessionLength, actualDuration: s.studentDuration || s.actualDuration, // minutes this student actually attended
+            sessionLength: s.sessionLength,
+            actualDuration: m.student || s.actualDuration, // minutes this student actually attended
+            teacherMinutes: m.teacher,
             valid: s.status === "completed" ? validIds.has(s.id) : null,
-          })),
+          };
+        }),
       };
     }),
 
