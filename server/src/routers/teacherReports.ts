@@ -276,7 +276,7 @@ export const teacherReportsRouter = createRouter({
             sessionLength: s.sessionLength,
             actualDuration: m.student || s.actualDuration, // minutes this student actually attended
             teacherMinutes: m.teacher,
-            valid: s.status === "completed" ? validIds.has(s.id) : null,
+            valid: validIds.has(s.id) ? true : (s.status === "completed" ? false : null),
           };
         }),
       };

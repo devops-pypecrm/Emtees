@@ -15,65 +15,25 @@ async function getClassDurationThreshold(db: ReturnType<typeof getDb>): Promise<
   return setting ? parseInt(setting.value) || DEFAULT_CLASS_DURATION_THRESHOLD : DEFAULT_CLASS_DURATION_THRESHOLD;
 }
 
-export async function evaluateClassCompletion(classId?: number, oneToOneSessionId?: number) {
-  if (!classId && !oneToOneSessionId) return;
-  const db = getDb();
-  
-  // 1. Fetch class details
-  let cls: any = null;
-  let isOneToOne = false;
+type OutcomeCtx = {
+  db: ReturnType<typeof getDb>;
+  cls: any;
+  classId?: number;
+  oneToOneSessionId?: number;
+  isOneToOne: boolean;
+  teacherId: number;
+  events: any[];
+  endTime: Date;
+};
 
-  if (classId) {
-    cls = await db.query.classes.findFirst({
-      where: eq(classes.id, classId)
-    });
-  } else if (oneToOneSessionId) {
-    isOneToOne = true;
-    cls = await db.query.oneToOneSessions.findFirst({
-      where: eq(oneToOneSessions.id, oneToOneSessionId)
-    });
-  }
-  
-  if (!cls) return;
-
-  // 2. Fetch all events for this class/session
-  const eventsQuery = classId 
-    ? eq(attendanceEvents.classId, classId) 
-    : eq(attendanceEvents.oneToOneSessionId, oneToOneSessionId!);
-
-  const events = await db.select().from(attendanceEvents).where(eventsQuery).orderBy(attendanceEvents.timestamp);
-  
-  // Minutes per person: the same shared calculation every report screen uses (see lib/sessionMinutes.ts).
-  const classEndTime = cls.endedAt || cls.completedAt || new Date();
-  const userDurations: Record<number, number> = computeParticipantMinutes(events, classEndTime);
-
-  // Fallback for 1-to-1: when the Jitsi webhook never delivered events (misconfigured / blocked),
-  // use the minute-by-minute heartbeat counters recorded by the client apps.
-  if (isOneToOne) {
-    if (!userDurations[cls.teacherId] && cls.teacherDuration) userDurations[cls.teacherId] = cls.teacherDuration;
-    if (!userDurations[cls.studentId] && cls.studentDuration) userDurations[cls.studentId] = cls.studentDuration;
-  }
-
-  // 3. Determine if teacher met the configurable duration threshold
-  const durationThreshold = await getClassDurationThreshold(db);
-  const teacherId = cls.teacherId;
-  const teacherDuration = userDurations[teacherId] || 0;
-  const teacherValid = teacherDuration >= durationThreshold;
-
-  // 4. Determine student validities and create Ledger Debits
-  const students = isOneToOne 
-    ? [cls.studentId]
-    : Object.keys(userDurations).map(Number).filter(id => id !== teacherId);
-
-  for (const studentId of students) {
-    const duration = userDurations[studentId] || 0;
-    const studentValid = duration >= durationThreshold;
-    
-    let finalStatus: "present" | "absent" = "absent";
-    if (teacherValid && studentValid) {
-      finalStatus = "present";
-    }
-    
+/**
+ * Writes one student's attendance row for a class/session and, if present, debits one class credit
+ * (once). Shared by the final evaluation and by the live "minimum reached" check, so both produce
+ * exactly the same records. Sends no notifications.
+ */
+async function applyStudentOutcome(c: OutcomeCtx, studentId: number, duration: number, finalStatus: "present" | "absent") {
+  const { db, cls, classId, oneToOneSessionId, isOneToOne, teacherId, events } = c;
+  const classEndTime = c.endTime;
     // Upsert attendance record
     const attQuery = classId 
       ? and(eq(attendance.classId, classId), eq(attendance.studentId, studentId))
@@ -164,6 +124,139 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
         }
       }
     }
+
+}
+
+/**
+ * Live check, run every minute for classes that are still running.
+ * As soon as the teacher AND a student have each spent the minimum time in the call, that student is
+ * recorded as present and one class credit is debited right away - the report does not wait for the class
+ * to end. Minutes only ever grow, so the final evaluation at the end of the class can only confirm this
+ * (it is idempotent: attendance is updated, the credit is never debited twice).
+ * Safety rules: the teacher must still be in the call (last event is a join, and for 1-to-1 the heartbeat
+ * is recent), so a teacher who silently dropped is not credited by this check.
+ * Returns true if anything was recorded. Sends no notifications.
+ */
+export async function recordProgressIfValid(classId?: number, oneToOneSessionId?: number): Promise<boolean> {
+  if (!classId && !oneToOneSessionId) return false;
+  const db = getDb();
+  const isOneToOne = !classId;
+  const cls: any = isOneToOne
+    ? await db.query.oneToOneSessions.findFirst({ where: eq(oneToOneSessions.id, oneToOneSessionId!) })
+    : await db.query.classes.findFirst({ where: eq(classes.id, classId!) });
+  if (!cls || cls.status !== "ongoing") return false;
+
+  const now = new Date();
+  const teacherId: number = cls.teacherId;
+  const events = await db.select().from(attendanceEvents)
+    .where(isOneToOne ? eq(attendanceEvents.oneToOneSessionId, oneToOneSessionId!) : eq(attendanceEvents.classId, classId!))
+    .orderBy(attendanceEvents.timestamp);
+  if (!events.length) return false;
+
+  const lastTeacherEvent = [...events].reverse().find((e: any) => e.userId === teacherId);
+  if (!lastTeacherEvent || lastTeacherEvent.eventType !== "join") return false;
+  if (isOneToOne && cls.lastHeartbeatAt && now.getTime() - new Date(cls.lastHeartbeatAt).getTime() > 3 * 60000) return false;
+
+  const threshold = await getClassDurationThreshold(db);
+  const minutes = computeParticipantMinutes(events, now);
+  if ((minutes[teacherId] || 0) < threshold) return false;
+
+  const studentIds = isOneToOne
+    ? [cls.studentId as number]
+    : Object.keys(minutes).map(Number).filter((id) => id !== teacherId);
+
+  const recorded: number[] = [];
+  for (const studentId of studentIds) {
+    const duration = minutes[studentId] || 0;
+    if (duration < threshold) continue;
+    const ref = isOneToOne
+      ? eq(classLedgerTransactions.referenceOneToOneId, oneToOneSessionId!)
+      : eq(classLedgerTransactions.referenceClassId, classId!);
+    const [already] = await db.select({ id: classLedgerTransactions.id }).from(classLedgerTransactions)
+      .where(and(eq(classLedgerTransactions.studentId, studentId), ref, eq(classLedgerTransactions.type, "debit")));
+    if (already) continue;
+    await applyStudentOutcome(
+      { db, cls, classId, oneToOneSessionId, isOneToOne, teacherId, events, endTime: now },
+      studentId, duration, "present"
+    );
+    recorded.push(studentId);
+  }
+
+  if (recorded.length) {
+    const { updateStudentSessionBalances } = await import("./sessionHelper");
+    for (const sid of recorded) {
+      await updateStudentSessionBalances(db, sid).catch((e: any) => console.error("[classEngine] balance sync failed:", e));
+    }
+    const { getIo } = await import("./socketInstance");
+    getIo()?.emit("class:updated");
+    console.log(`[classEngine] minimum reached - recorded ${recorded.length} student(s) present for ${isOneToOne ? "1-to-1 session " + oneToOneSessionId : "class " + classId}`);
+  }
+  return recorded.length > 0;
+}
+
+export async function evaluateClassCompletion(classId?: number, oneToOneSessionId?: number) {
+  if (!classId && !oneToOneSessionId) return;
+  const db = getDb();
+  
+  // 1. Fetch class details
+  let cls: any = null;
+  let isOneToOne = false;
+
+  if (classId) {
+    cls = await db.query.classes.findFirst({
+      where: eq(classes.id, classId)
+    });
+  } else if (oneToOneSessionId) {
+    isOneToOne = true;
+    cls = await db.query.oneToOneSessions.findFirst({
+      where: eq(oneToOneSessions.id, oneToOneSessionId)
+    });
+  }
+  
+  if (!cls) return;
+
+  // 2. Fetch all events for this class/session
+  const eventsQuery = classId 
+    ? eq(attendanceEvents.classId, classId) 
+    : eq(attendanceEvents.oneToOneSessionId, oneToOneSessionId!);
+
+  const events = await db.select().from(attendanceEvents).where(eventsQuery).orderBy(attendanceEvents.timestamp);
+  
+  // Minutes per person: the same shared calculation every report screen uses (see lib/sessionMinutes.ts).
+  const classEndTime = cls.endedAt || cls.completedAt || new Date();
+  const userDurations: Record<number, number> = computeParticipantMinutes(events, classEndTime);
+
+  // Fallback for 1-to-1: when the Jitsi webhook never delivered events (misconfigured / blocked),
+  // use the minute-by-minute heartbeat counters recorded by the client apps.
+  if (isOneToOne) {
+    if (!userDurations[cls.teacherId] && cls.teacherDuration) userDurations[cls.teacherId] = cls.teacherDuration;
+    if (!userDurations[cls.studentId] && cls.studentDuration) userDurations[cls.studentId] = cls.studentDuration;
+  }
+
+  // 3. Determine if teacher met the configurable duration threshold
+  const durationThreshold = await getClassDurationThreshold(db);
+  const teacherId = cls.teacherId;
+  const teacherDuration = userDurations[teacherId] || 0;
+  const teacherValid = teacherDuration >= durationThreshold;
+
+  // 4. Determine student validities and create Ledger Debits
+  const students = isOneToOne 
+    ? [cls.studentId]
+    : Object.keys(userDurations).map(Number).filter(id => id !== teacherId);
+
+  for (const studentId of students) {
+    const duration = userDurations[studentId] || 0;
+    const studentValid = duration >= durationThreshold;
+    
+    let finalStatus: "present" | "absent" = "absent";
+    if (teacherValid && studentValid) {
+      finalStatus = "present";
+    }
+    
+    await applyStudentOutcome(
+      { db, cls, classId, oneToOneSessionId, isOneToOne, teacherId, events, endTime: classEndTime },
+      studentId, duration, finalStatus
+    );
   }
 
   // Always recalculate remuneration (even when invalid) so a re-evaluated class

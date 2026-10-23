@@ -724,12 +724,27 @@ export async function autoEndStaleSessions(): Promise<void> {
   }
 }
 
+/** Records attendance + class credit the moment the minimum time is reached in classes still running. */
+export async function checkLiveSessionProgress(): Promise<void> {
+  const db = getDb();
+  const { recordProgressIfValid } = await import("./classEngine");
+  const live1 = await db.select({ id: oneToOneSessions.id }).from(oneToOneSessions).where(eq(oneToOneSessions.status, "ongoing"));
+  for (const s of live1) {
+    await recordProgressIfValid(undefined, s.id).catch((e: any) => console.error(`[scheduler] live check 1-to-1 #${s.id} failed:`, e?.message || e));
+  }
+  const liveG = await db.select({ id: classes.id }).from(classes).where(eq(classes.status, "ongoing"));
+  for (const c of liveG) {
+    await recordProgressIfValid(c.id, undefined).catch((e: any) => console.error(`[scheduler] live check class #${c.id} failed:`, e?.message || e));
+  }
+}
+
 export async function runSchedulerTasks(): Promise<void> {
   await sendClassReminders();
   await sendOneToOneReminders();
   await processFeesAndRestrictions();
   // await sendDueDateReminders(); // if exists
   await expireOneToOneSessions();
+  await checkLiveSessionProgress();
   await autoEndStaleSessions();
   await cleanupExpiredRecordings();
   await checkStudentConsecutiveAbsences();

@@ -439,7 +439,7 @@ async function buildSessionRows(teacherId: number, from: Date, to: Date, only?: 
     const a = attO.find((x) => x.oneToOneSessionId === s.id);
     rows.push({
       type: "one_to_one", id: s.id, title: s.title, scheduledAt: s.scheduledAt, sessionLength: s.sessionLength, status: s.status,
-      valid: s.status === "completed" ? validO.has(s.id) : null,
+      valid: validO.has(s.id) ? true : (s.status === "completed" ? false : null),
       teacherMinutes: tMin,
       students: [{ id: s.studentId, name: nameOf(s.studentId), minutes: stMin, attendance: a?.status ?? null }],
       events: evs.map((e) => ({ name: e.userId === s.teacherId ? "Teacher" : nameOf(e.userId), eventType: e.eventType, timestamp: e.timestamp })),
@@ -451,7 +451,7 @@ async function buildSessionRows(teacherId: number, from: Date, to: Date, only?: 
     const atts = attG.filter((a) => a.classId === c.id);
     rows.push({
       type: "group", id: c.id, title: c.title, scheduledAt: c.scheduledAt, sessionLength: c.duration, status: c.status,
-      valid: c.status === "completed" ? validG.has(c.id) : null,
+      valid: validG.has(c.id) ? true : (c.status === "completed" ? false : null),
       teacherMinutes: wholeMinutes(mins[c.teacherId]),
       students: atts.map((a) => ({ id: a.studentId, name: nameOf(a.studentId), minutes: mins[a.studentId] ?? (a.duration || 0), attendance: a.status })),
       events: evs.map((e) => ({ name: e.userId === c.teacherId ? "Teacher" : nameOf(e.userId), eventType: e.eventType, timestamp: e.timestamp })),
