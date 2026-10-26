@@ -414,8 +414,8 @@ async function buildSessionRows(teacherId: number, from: Date, to: Date, only?: 
     o2oWhere.push(gte(oneToOneSessions.scheduledAt, from), lt(oneToOneSessions.scheduledAt, to));
     grpWhere.push(gte(classes.scheduledAt, from), lt(classes.scheduledAt, to));
   }
-  const o2o = only && only.type !== "one_to_one" ? [] : await db.select().from(oneToOneSessions).where(and(...o2oWhere)).orderBy(desc(oneToOneSessions.scheduledAt)).limit(200);
-  const grp = only && only.type !== "group" ? [] : await db.select().from(classes).where(and(...grpWhere)).orderBy(desc(classes.scheduledAt)).limit(200);
+  const o2o = only && only.type !== "one_to_one" ? [] : await db.select().from(oneToOneSessions).where(and(...o2oWhere)).orderBy(desc(oneToOneSessions.scheduledAt)).limit(600);
+  const grp = only && only.type !== "group" ? [] : await db.select().from(classes).where(and(...grpWhere)).orderBy(desc(classes.scheduledAt)).limit(600);
 
   const o2oIds = o2o.map((x) => x.id);
   const grpIds = grp.map((x) => x.id);
