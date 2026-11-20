@@ -52,7 +52,7 @@ export default function Register() {
         {c && <div className="rounded-lg bg-slate-50 border p-3 text-sm"><div className="font-medium mb-1">Your counsellor</div>{c.name} · ID {c.employeeId} · {c.phone}</div>}
 
         <section className="space-y-3"><h2 className="font-semibold">Personal information</h2>
-          <div className="grid md:grid-cols-2 gap-3">
+          <div className="grid md:grid-cols-2 gap-4">
             <Field label="Full name *"><Input value={f.v.fullName} onChange={(e) => f.set("fullName", e.target.value)} /></Field>
             <Field label="Mobile number *"><Input inputMode="tel" value={f.v.mobile} onChange={(e) => f.set("mobile", e.target.value)} /></Field>
             <Field label="WhatsApp number"><Input inputMode="tel" value={f.v.whatsapp} onChange={(e) => f.set("whatsapp", e.target.value)} placeholder="Same as mobile if empty" /></Field>
@@ -65,14 +65,14 @@ export default function Register() {
           </div></section>
 
         <section className="space-y-3"><h2 className="font-semibold">Course information</h2>
-          <div className="grid md:grid-cols-2 gap-3">
+          <div className="grid md:grid-cols-2 gap-4">
             <Field label="Course *"><Pick value={f.v.department} onChange={(x) => f.set("department", x)} options={DEPT_OPTIONS} /></Field>
             <Field label="Session type *"><Pick value={f.v.sessionType} onChange={(x) => f.set("sessionType", x)} options={[{ value: "individual", label: "Individual session" }, { value: "group", label: "Group session" }]} /></Field>
             <div className="md:col-span-2"><Field label="Preferred class timing *"><Input value={f.v.preferredTiming} onChange={(e) => f.set("preferredTiming", e.target.value)} placeholder="e.g. 7:00 PM – 8:00 PM" /></Field></div>
           </div></section>
 
         <section className="space-y-3"><h2 className="font-semibold">Payment information</h2>
-          <div className="grid md:grid-cols-2 gap-3">
+          <div className="grid md:grid-cols-2 gap-4">
             <Field label="Amount paid (₹) *"><Input inputMode="decimal" value={f.v.amountPaid} onChange={(e) => f.set("amountPaid", e.target.value)} /></Field>
             <Field label="Payment date *"><Input type="date" value={f.v.paymentDate} onChange={(e) => f.set("paymentDate", e.target.value)} /></Field>
             <Field label="Payment method *"><Pick value={f.v.paymentMethod} onChange={(x) => f.set("paymentMethod", x)} options={["UPI", "Bank transfer", "Card", "Cash", "Other"].map((x) => ({ value: x, label: x }))} /></Field>

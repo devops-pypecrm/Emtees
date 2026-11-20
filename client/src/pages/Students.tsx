@@ -32,7 +32,7 @@ export default function Students() {
         <Field label="Name"><Input value={f.v.name} onChange={(e) => f.set("name", e.target.value)} /></Field>
         <Field label="Mobile"><Input value={f.v.phone} onChange={(e) => f.set("phone", e.target.value)} /></Field>
         <Field label="Email"><Input value={f.v.email} onChange={(e) => f.set("email", e.target.value)} /></Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           <Field label="Course"><Pick value={f.v.department} onChange={(x) => f.set("department", x)} options={DEPT_OPTIONS} /></Field>
           <Field label="Session type"><Pick value={f.v.sessionType} onChange={(x) => f.set("sessionType", x)} options={[{ value: "individual", label: "Individual" }, { value: "group", label: "Group" }]} /></Field>
           <Field label="Preferred timing"><Input value={f.v.timing} onChange={(e) => f.set("timing", e.target.value)} /></Field>

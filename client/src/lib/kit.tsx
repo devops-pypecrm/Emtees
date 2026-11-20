@@ -28,15 +28,15 @@ const TONE: Record<string, string> = {
   ongoing: "bg-rose-100 text-rose-700", cancelled_: "bg-red-100 text-red-700",
 };
 export function Chip({ value, label }: { value: string; label?: string }) {
-  return <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${TONE[value] || "bg-slate-100 text-slate-700"}`}>{label ?? STATUS_LABEL[value] ?? value.replace(/_/g, " ")}</span>;
+  return <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${TONE[value] || "bg-slate-100 text-slate-700"}`}>{label ?? STATUS_LABEL[value] ?? value.replace(/_/g, " ")}</span>;
 }
 
 export function Page({ title, subtitle, actions, children }: { title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) {
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h1 className="text-xl font-semibold text-slate-900">{title}</h1>{subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}</div>
-        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="max-w-2xl"><h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>{subtitle && <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{subtitle}</p>}</div>
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
       {children}
     </div>
@@ -46,34 +46,34 @@ export function Page({ title, subtitle, actions, children }: { title: string; su
 export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: string; tone?: "warn" | "good" | "bad" }) {
   const c = tone === "warn" ? "text-amber-600" : tone === "good" ? "text-emerald-600" : tone === "bad" ? "text-red-600" : "text-slate-900";
   return (
-    <Card className="p-4 gap-1">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`text-2xl font-semibold ${c}`}>{value}</div>
-      {hint && <div className="text-xs text-slate-400">{hint}</div>}
+    <Card className="p-5 gap-2 shadow-none border-slate-200 h-full hover:border-slate-300 transition-colors">
+      <div className="text-[13px] text-slate-500">{label}</div>
+      <div className={`text-[28px] leading-none font-semibold tracking-tight ${c}`}>{value}</div>
+      {hint && <div className="text-xs text-slate-400 mt-1">{hint}</div>}
     </Card>
   );
 }
-export const StatGrid = ({ children }: { children: ReactNode }) => <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{children}</div>;
+export const StatGrid = ({ children }: { children: ReactNode }) => <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{children}</div>;
 
 export function Loading({ text = "Loading…" }: { text?: string }) {
-  return <div className="flex items-center gap-2 text-slate-500 text-sm py-8 justify-center"><Loader2 className="h-4 w-4 animate-spin" />{text}</div>;
+  return <div className="flex items-center gap-2 text-slate-400 text-sm py-16 justify-center"><Loader2 className="h-4 w-4 animate-spin" />{text}</div>;
 }
-export const Empty = ({ text }: { text: string }) => <div className="text-center text-sm text-slate-500 py-10 border border-dashed rounded-lg bg-white">{text}</div>;
+export const Empty = ({ text }: { text: string }) => <div className="text-center text-sm text-slate-400 py-16 border border-dashed border-slate-200 rounded-xl bg-white">{text}</div>;
 
 export type Col<T> = { header: string; cell: (r: T) => ReactNode; className?: string };
 export function Table<T>({ cols, rows, empty = "Nothing to show", onRow }: { cols: Col<T>[]; rows: T[] | undefined; empty?: string; onRow?: (r: T) => void }) {
   if (!rows) return <Loading />;
   if (!rows.length) return <Empty text={empty} />;
   return (
-    <div className="overflow-x-auto rounded-lg border bg-white">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-          <tr>{cols.map((c, i) => <th key={i} className={`px-3 py-2 font-medium ${c.className || ""}`}>{c.header}</th>)}</tr>
+        <thead className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+          <tr>{cols.map((c, i) => <th key={i} className={`px-5 py-3 font-medium whitespace-nowrap ${c.className || ""}`}>{c.header}</th>)}</tr>
         </thead>
-        <tbody className="divide-y">
+        <tbody className="divide-y divide-slate-100">
           {rows.map((r, i) => (
-            <tr key={i} className={onRow ? "cursor-pointer hover:bg-slate-50" : ""} onClick={() => onRow?.(r)}>
-              {cols.map((c, j) => <td key={j} className={`px-3 py-2 align-top ${c.className || ""}`}>{c.cell(r)}</td>)}
+            <tr key={i} className={`${onRow ? "cursor-pointer" : ""} hover:bg-slate-50/70 transition-colors`} onClick={() => onRow?.(r)}>
+              {cols.map((c, j) => <td key={j} className={`px-5 py-3.5 align-middle text-slate-700 ${c.className || ""}`}>{c.cell(r)}</td>)}
             </tr>
           ))}
         </tbody>
@@ -83,11 +83,11 @@ export function Table<T>({ cols, rows, empty = "Nothing to show", onRow }: { col
 }
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
-  return <div className="space-y-1.5"><Label className="text-sm">{label}</Label>{children}{hint && <p className="text-xs text-slate-500">{hint}</p>}</div>;
+  return <div className="space-y-2"><Label className="text-sm font-medium text-slate-700">{label}</Label>{children}{hint && <p className="text-xs text-slate-500">{hint}</p>}</div>;
 }
 export function Pick({ value, onChange, options, placeholder = "Select…", disabled }: { value: string | number | undefined | null; onChange: (v: string) => void; options: { value: string | number; label: string }[]; placeholder?: string; disabled?: boolean }) {
   return (
-    <select disabled={disabled} className="h-9 w-full rounded-md border border-input bg-white px-3 text-sm" value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+    <select disabled={disabled} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
@@ -101,9 +101,9 @@ export function FormDialog({ open, onClose, title, children, onSubmit, submitLab
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className={wide ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-md max-h-[90vh] overflow-y-auto"}>
+      <DialogContent className={`${wide ? "max-w-2xl" : "max-w-md"} max-h-[90vh] overflow-y-auto rounded-2xl p-7`}>
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="space-y-3">{children}</div>
+        <div className="space-y-4 py-2">{children}</div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={onSubmit} disabled={busy}>{busy && <Loader2 className="h-4 w-4 animate-spin mr-1" />}{submitLabel}</Button>

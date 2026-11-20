@@ -16,7 +16,7 @@ export default function Today() {
   const s = sum.data;
   const s1 = sch.data;
   const Row = ({ c, tone }: { c: any; tone?: string }) => (
-    <div className={`flex items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 ${tone === "now" ? "ring-2 ring-[#C8102E]" : ""} ${tone === "late" ? "border-red-300" : ""}`}>
+    <div className={`flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 ${tone === "now" ? "ring-2 ring-[#C8102E]" : ""} ${tone === "late" ? "border-red-300" : ""}`}>
       <div><div className="font-medium">{c.studentName}</div><div className="text-xs text-slate-500">{fmtTime(c.scheduledAt)} · {c.sessionLength} min{c.isManual ? " · via Google Meet" : ""}</div></div>
       <div className="flex gap-2 items-center">
         {tone === "late" && <Chip value="absent" label="Overdue" />}{tone === "done" && <Chip value="completed" />}
@@ -24,7 +24,7 @@ export default function Today() {
       </div>
     </div>
   );
-  const Group = ({ title, rows, tone }: { title: string; rows?: any[]; tone: string }) => rows && rows.length ? <section className="space-y-2"><h2 className="font-semibold text-sm text-slate-600">{title}</h2>{rows.map((c) => <Row key={c.id} c={c} tone={tone} />)}</section> : null;
+  const Group = ({ title, rows, tone }: { title: string; rows?: any[]; tone: string }) => rows && rows.length ? <section className="space-y-3"><h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</h2>{rows.map((c) => <Row key={c.id} c={c} tone={tone} />)}</section> : null;
   return (
     <Page title="Today" subtitle="Your classes, earliest upcoming first." actions={<Button variant="outline" onClick={() => setMeet(true)}>Record Google Meet class</Button>}>
       {!s ? <Loading /> : (
@@ -45,7 +45,7 @@ export default function Today() {
       {rm.element}
       <FormDialog wide open={meet} onClose={() => setMeet(false)} title="Record a class held on Google Meet" busy={manual.isPending}
         onSubmit={() => { const v = f.v; if (!v.studentId || !v.start || !v.end || !v.reason) return toast.error("Fill in the student, times and reason"); manual.mutate({ studentId: Number(v.studentId), meetLink: v.link || undefined, startedAt: new Date(`${v.date}T${v.start}:00`), endedAt: new Date(`${v.date}T${v.end}:00`), teacherPresent: v.teacherPresent === "yes", studentPresent: v.studentPresent === "yes", reason: v.reason, remarks: v.remarks || undefined }); }}>
-        <div className="grid md:grid-cols-2 gap-3">
+        <div className="grid md:grid-cols-2 gap-4">
           <Field label="Student"><Pick value={f.v.studentId} onChange={(x) => f.set("studentId", x)} options={(students.data || []).map((st: any) => ({ value: st.id, label: st.name }))} /></Field>
           <Field label="Google Meet link"><Input value={f.v.link} onChange={(e) => f.set("link", e.target.value)} placeholder="https://meet.google.com/…" /></Field>
           <Field label="Date"><Input type="date" value={f.v.date} onChange={(e) => f.set("date", e.target.value)} /></Field><div />

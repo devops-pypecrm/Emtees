@@ -41,7 +41,7 @@ export default function Groups() {
       {rm.element}
       <FormDialog wide open={open} onClose={() => setOpen(false)} title="New group session" busy={create.isPending}
         onSubmit={() => { const v = f.v; const ids = [v.s1, v.s2, v.s3].filter(Boolean).map(Number); if (!v.name || !v.teacherId || !v.at) return toast.error("Fill in name, teacher and time"); if (new Set(ids).size < 2) return toast.error("Choose 2 or 3 different students"); create.mutate({ name: v.name, department: v.department as any, teacherId: Number(v.teacherId), studentIds: ids, durationMinutes: Number(v.duration), credits: Number(v.credits), scheduledAt: new Date(v.at), payOverride: v.pay ? Number(v.pay) : undefined, specialConditions: v.special || undefined }); }}>
-        <div className="grid md:grid-cols-2 gap-3">
+        <div className="grid md:grid-cols-2 gap-4">
           <Field label="Group name"><Input value={f.v.name} onChange={(e) => f.set("name", e.target.value)} /></Field>
           <Field label="Department"><Pick value={f.v.department} onChange={(x) => f.set("department", x)} options={DEPT_OPTIONS} /></Field>
           <Field label="Teacher"><Pick value={f.v.teacherId} onChange={(x) => f.set("teacherId", x)} options={(teachers.data || []).map((t: any) => ({ value: t.id, label: t.name }))} /></Field>

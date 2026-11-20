@@ -48,7 +48,7 @@ function DuplicateStrip({ rows, onResolve }: { rows: any[] | undefined; onResolv
   const dups = (rows || []).filter((r) => r.duplicateOfUserId && !r.duplicateResolved);
   if (!dups.length) return null;
   return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm space-y-2">
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm space-y-2">
       <div className="font-medium text-amber-900">Duplicate mobile numbers ({dups.length}) — an administrator must link each to the existing student</div>
       {dups.map((d) => <div key={d.id} className="flex items-center justify-between gap-2"><span>{d.fullName} · {d.mobile}</span><Button size="sm" variant="outline" onClick={() => onResolve(d.id)}>Link to existing student</Button></div>)}
     </div>

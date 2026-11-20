@@ -39,7 +39,7 @@ export default function AdminAdmissions() {
       <FormDialog open={!!sel} onClose={() => setSel(null)} title={`Allocate classes — ${sel?.fullName || ""}`} busy={allocate.isPending}
         onSubmit={() => allocate.mutate({ studentUserId: sel.studentUserId, admissionId: sel.id, kind: "initial", classes: Number(f.v.classes), durationMinutes: Number(f.v.duration), sessionType: f.v.sessionType as any, amount: sel.verifiedAmount ? Number(sel.verifiedAmount) : undefined, specialConditions: f.v.special || undefined })}>
         <p className="text-xs text-slate-500">No fixed fee-to-class rule: you decide the number of classes from the amount paid ({sel?.verifiedAmount ? inr(sel.verifiedAmount) : "—"}), duration, package and any special offer.</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           <Field label="Total classes"><Input inputMode="numeric" value={f.v.classes} onChange={(e) => f.set("classes", e.target.value)} /></Field>
           <Field label="Class duration (min)"><Input inputMode="numeric" value={f.v.duration} onChange={(e) => f.set("duration", e.target.value)} /></Field>
           <Field label="Session type"><Pick value={f.v.sessionType} onChange={(x) => f.set("sessionType", x)} options={[{ value: "individual", label: "Individual" }, { value: "group", label: "Group" }]} /></Field>

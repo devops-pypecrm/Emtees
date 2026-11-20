@@ -38,7 +38,7 @@ export default function People() {
 
       <FormDialog wide open={open} onClose={() => setOpen(false)} title="Add staff member" busy={create.isPending}
         onSubmit={() => { const v = f.v; create.mutate({ role: v.role as any, name: v.name, username: v.username, password: v.password, phone: v.phone, whatsapp: v.whatsapp || undefined, email: v.email || undefined, departments: needsDept ? (v.dept.split(",") as any) : [], qualification: v.qualification || undefined, languages: v.languages || undefined, team: v.team || undefined, joiningDate: v.joiningDate || undefined, employeeId: v.employeeId || undefined }); }}>
-        <div className="grid md:grid-cols-2 gap-3">
+        <div className="grid md:grid-cols-2 gap-4">
           <Field label="Role"><Pick value={f.v.role} onChange={(x) => f.set("role", x)} options={ROLE_OPTS} /></Field>
           {needsDept && <Field label="Department" hint={f.v.role === "academic_head" ? "A head belongs to one department." : "Teachers can handle one or both."}><Pick value={f.v.dept} onChange={(x) => f.set("dept", x)} options={f.v.role === "academic_head" ? DEPT_MULTI.slice(0, 2) : DEPT_MULTI} /></Field>}
           <Field label="Full name"><Input value={f.v.name} onChange={(x) => f.set("name", x.target.value)} /></Field>
@@ -56,7 +56,7 @@ export default function People() {
 
       <FormDialog wide open={!!edit} onClose={() => setEdit(null)} title={`Edit ${edit?.name || ""}`} busy={update.isPending}
         onSubmit={() => update.mutate({ id: edit.id, name: e.v.name, phone: e.v.phone, whatsapp: e.v.whatsapp, email: e.v.email, password: e.v.password || undefined, status: e.v.status as any, qualification: e.v.qualification, team: e.v.team, departments: e.v.dept ? (e.v.dept.split(",") as any) : undefined })}>
-        <div className="grid md:grid-cols-2 gap-3">
+        <div className="grid md:grid-cols-2 gap-4">
           <Field label="Name"><Input value={e.v.name} onChange={(x) => e.set("name", x.target.value)} /></Field>
           <Field label="Status"><Pick value={e.v.status} onChange={(x) => e.set("status", x)} options={["active", "inactive", "suspended", "on_hold"].map((x) => ({ value: x, label: x.replace("_", " ") }))} /></Field>
           <Field label="Mobile"><Input value={e.v.phone} onChange={(x) => e.set("phone", x.target.value)} /></Field>

@@ -24,8 +24,8 @@ export default function StudentHome() {
       </StatGrid>
       <StatGrid><Stat label="Course validity" value={o.validityEndDate ? `${o.remainingDays} days` : "Starts with first class"} hint={o.validityEndDate ? `Expires ${fmtDate(o.validityEndDate)}` : undefined} tone={expiring ? "warn" : undefined} />
         <Stat label="Last attended" value={<span className="text-lg">{fmtDate(o.lastAttendedAt)}</span>} /></StatGrid>
-      {expiring && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Your course expires in {o.remainingDays} days. Please use your remaining classes or contact us to extend.</div>}
-      {(tt.data || []).length > 0 && <section><h2 className="font-semibold mb-2">Your timetable</h2><Table rows={tt.data} cols={[{ header: "Days", cell: (s: any) => s.weekdays.split(",").map((d: string) => DAYS[Number(d)]).join(", ") }, { header: "Time (IST)", cell: (s: any) => s.timeOfDay }, { header: "Teacher", cell: (s: any) => s.teacherName }, { header: "Minutes", cell: (s: any) => s.durationMinutes }]} /></section>}
+      {expiring && <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">Your course expires in {o.remainingDays} days. Please use your remaining classes or contact us to extend.</div>}
+      {(tt.data || []).length > 0 && <section><h2 className="text-base font-semibold text-slate-900 mb-3">Your timetable</h2><Table rows={tt.data} cols={[{ header: "Days", cell: (s: any) => s.weekdays.split(",").map((d: string) => DAYS[Number(d)]).join(", ") }, { header: "Time (IST)", cell: (s: any) => s.timeOfDay }, { header: "Teacher", cell: (s: any) => s.teacherName }, { header: "Minutes", cell: (s: any) => s.durationMinutes }]} /></section>}
       {rm.element}
     </Page>
   );

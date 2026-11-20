@@ -25,7 +25,7 @@ export default function Rates() {
         ]} />
       <FormDialog wide open={open} onClose={() => setOpen(false)} title="New remuneration rule" busy={save.isPending}
         onSubmit={() => { if (!r.amount) return toast.error("Enter the amount"); save.mutate({ kind: r.kind, amount: Number(r.amount), teacherId: n(r.teacherId), course: r.course || null, sessionType: r.sessionType || null, groupSize: n(r.groupSize), durationMinutes: n(r.durationMinutes), reason: r.reason || undefined }); }}>
-        <div className="grid md:grid-cols-2 gap-3">
+        <div className="grid md:grid-cols-2 gap-4">
           <Field label="Pay type"><Pick value={r.kind} onChange={(x) => sp("kind", x)} options={[{ value: "regular", label: "Class" }, { value: "demo", label: "Demo completed" }, { value: "demo_bonus", label: "Demo conversion bonus" }]} /></Field>
           <Field label="Amount (₹)"><Input inputMode="decimal" value={r.amount} onChange={(e) => sp("amount", e.target.value)} /></Field>
           <Field label="Teacher (optional)"><Pick value={r.teacherId} onChange={(x) => sp("teacherId", x)} placeholder="Any teacher" options={(teachers.data || []).map((t: any) => ({ value: t.id, label: t.name }))} /></Field>
