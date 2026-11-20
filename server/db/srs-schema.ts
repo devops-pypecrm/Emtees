@@ -190,3 +190,18 @@ export const timetableSlots = pgTable("timetable_slots", {
   createdBy: bigint("created_by", { mode: "number" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+/** SRS §3.1 / §12.4 – the HR-style details kept for every counsellor, teacher, head, accountant and admin. */
+export const staffProfiles = pgTable("staff_profiles", {
+  id: serial("id").primaryKey(),
+  userId: bigint("user_id", { mode: "number" }).notNull().unique(),
+  employeeId: varchar("employee_id", { length: 50 }),
+  whatsapp: varchar("whatsapp", { length: 30 }),
+  departments: varchar("departments", { length: 40 }), // "english" | "hindi" | "english,hindi"
+  languages: varchar("languages", { length: 255 }),
+  qualification: varchar("qualification", { length: 255 }),
+  team: varchar("team", { length: 100 }),
+  joiningDate: varchar("joining_date", { length: 20 }),
+  employmentStatus: varchar("employment_status", { length: 30 }).default("active"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

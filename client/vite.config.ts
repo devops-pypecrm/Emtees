@@ -22,7 +22,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@/pages": path.resolve(__dirname, "./src/lms-pages"),
+      "@/pages": path.resolve(__dirname, "./src/pages"),
       "@contracts": path.resolve(__dirname, "../contracts"),
       "zod": zodPath,
       "libphonenumber-js": libphonePath,

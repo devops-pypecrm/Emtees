@@ -14,7 +14,7 @@
     "jsx": "react-jsx",
     "paths": {
       "@/*": ["./src/*"],
-      "@/pages/*": ["./src/lms-pages/*"],
+      "@/pages/*": ["./src/pages/*"],
       "@contracts/*": ["../contracts/*"],
       "@db/*": ["../server/db/*"],
       "db/*": ["../server/db/*"],

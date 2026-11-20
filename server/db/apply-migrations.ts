@@ -378,6 +378,10 @@ export async function applyMigrations() {
       FROM one_to_one_sessions s
       WHERE NOT EXISTS (SELECT 1 FROM teacher_assignments a WHERE a.student_user_id = s.student_id)
       ORDER BY s.student_id, s.scheduled_at DESC;`);
+    await client.query(`CREATE TABLE IF NOT EXISTS "staff_profiles" (
+      "id" serial PRIMARY KEY, "user_id" bigint NOT NULL UNIQUE, "employee_id" varchar(50), "whatsapp" varchar(30), "departments" varchar(40),
+      "languages" varchar(255), "qualification" varchar(255), "team" varchar(100), "joining_date" varchar(20), "employment_status" varchar(30) DEFAULT 'active',
+      "created_at" timestamp NOT NULL DEFAULT now());`);
     await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "is_manual" boolean NOT NULL DEFAULT false;`);
     await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "meet_link" varchar(500);`);
     await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "manual_reason" text;`);

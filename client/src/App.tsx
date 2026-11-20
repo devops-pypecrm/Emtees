@@ -1,133 +1,100 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, Outlet } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, Outlet, useParams } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import ForceChangePassword from "@/components/ForceChangePassword";
+import { useClassroom } from "@/components/Classroom";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import DownloadApp from "./pages/DownloadApp";
+import Reports from "./pages/Reports";
+import Students from "./pages/Students";
+import Demos from "./pages/Demos";
+import Requests from "./pages/Requests";
+import CounsellorAdmissions from "./pages/counsellor/Admissions";
+import Payments from "./pages/finance/Payments";
+import TeacherPay from "./pages/finance/TeacherPay";
+import Overview from "./pages/admin/Overview";
+import AdminAdmissions from "./pages/admin/AdminAdmissions";
+import People from "./pages/admin/People";
+import Rates from "./pages/admin/Rates";
+import SettingsPage from "./pages/admin/Settings";
+import Audit from "./pages/admin/Audit";
+import Assign from "./pages/head/Assign";
+import Timetable from "./pages/head/Timetable";
+import Teachers from "./pages/head/Teachers";
+import Today from "./pages/teacher/Today";
+import MyStudents from "./pages/teacher/MyStudents";
+import Earnings from "./pages/teacher/Earnings";
+import Availability from "./pages/teacher/Availability";
+import StudentHome from "./pages/student/Home";
+import StudentClasses from "./pages/student/Classes";
+import { Loading } from "@/lib/kit";
 
-// Import pages
-import Dashboard from "./lms-pages/Dashboard";
-import Batches from "./lms-pages/Batches";
-import Classes from "./lms-pages/Classes";
-import Fees from "./lms-pages/Fees";
-import Salaries from "./lms-pages/Salaries";
-import Requests from "./lms-pages/Requests";
-import Reports from "./lms-pages/Reports";
-import TeacherReports from "./lms-pages/TeacherReports";
-import Notifications from "./lms-pages/Notifications";
-import Settings from "./lms-pages/Settings";
-import Students from "./lms-pages/Students";
-import Users from "./lms-pages/Users";
-import QualificationManagement from "./lms-pages/QualificationManagement";
-import Login from "./lms-pages/Login";
-import Admission from "./lms-pages/Admission";
-import DownloadApp from "./lms-pages/DownloadApp";
-import SalesExecutiveStudents from "./lms-pages/SalesExecutiveStudents";
-import SalesExecutives from "./lms-pages/SalesExecutives";
-import SalesRegistrations from "./lms-pages/SalesRegistrations";
-import SalesReports from "./lms-pages/SalesReports";
-import SalesDashboard from "./lms-pages/SalesDashboard";
-import Departments from "./lms-pages/Departments";
-import SalesDemoClasses from "./lms-pages/SalesDemoClasses";
-import AcademicHeadPortal from "./lms-pages/AcademicHeadPortal";
-
-function ProtectedLayout() {
+function Protected() {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!isLoading && !user) {
-      navigate("/login", { replace: true });
-    }
-  }, [user, isLoading, navigate]);
-
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  if (user.mustChangePassword) {
-    return <ForceChangePassword />;
-  }
-
-  return (
-    <Layout>
-      <Outlet />
-    </Layout>
-  );
+  useEffect(() => { if (!isLoading && !user) navigate("/login", { replace: true }); }, [user, isLoading, navigate]);
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loading /></div>;
+  if (!user) return null;
+  if (user.mustChangePassword) return <ForceChangePassword />;
+  return <Layout><Outlet /></Layout>;
 }
 
-function RegisterRedirect() {
-  const { user, isLoading } = useAuth();
+/** Home screen depends on the role. */
+function Home() {
+  const { user } = useAuth();
+  switch (user!.role) {
+    case "sales_executive": return <CounsellorAdmissions />;
+    case "accountant": return <Payments />;
+    case "teacher": return <Today />;
+    case "student": return <StudentHome />;
+    default: return <Overview />;
+  }
+}
+
+/** Opened from the incoming-call popup: /class/:id joins that 1-to-1 session. */
+function ClassLink() {
+  const { id } = useParams();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!isLoading) {
-      if (!user) {
-        navigate(
-          "/login?reason=Self-registration+is+disabled.+Please+contact+an+administrator+to+create+an+account.",
-          { replace: true }
-        );
-      } else {
-        const isAdmin = ["super_admin", "admin", "academic_head"].includes(user.role);
-        if (isAdmin) {
-          navigate("/users", { replace: true });
-        } else {
-          navigate("/?reason=You+do+not+have+permission+to+access+the+registration+page.", {
-            replace: true,
-          });
-        }
-      }
-    }
-  }, [user, isLoading, navigate]);
-
-  return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  const rm = useClassroom(() => navigate("/", { replace: true }));
+  useEffect(() => { if (id) rm.open({ id: Number(id) }); /* eslint-disable-next-line */ }, [id]);
+  return <>{rm.element}<div className="text-sm text-slate-500">Opening your classroom…</div></>;
 }
 
 export default function App() {
+  const { user } = useAuth();
+  const role = user?.role;
+  const isAdmin = role === "admin" || role === "super_admin";
+  const isHead = role === "academic_head";
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<RegisterRedirect />} />
-        <Route path="/admission/:code" element={<Admission />} />
+        <Route path="/register/:token" element={<Register />} />
         <Route path="/app" element={<DownloadApp />} />
-        
-        {/* Protected Dashboard Routes */}
-        <Route path="/" element={<ProtectedLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="batches" element={<Batches />} />
-          <Route path="classes">
-            <Route index element={<Navigate to="/classes/group" replace />} />
-            <Route path="group" element={<Classes type="group" />} />
-            <Route path="one-to-one" element={<Classes type="one-to-one" />} />
-            <Route path="demo" element={<Classes type="demo" />} />
-          </Route>
-          <Route path="fees" element={<Fees />} />
-          <Route path="salaries" element={<Salaries />} />
-          <Route path="requests" element={<Requests />} />
+        <Route path="/" element={<Protected />}>
+          <Route index element={<Home />} />
+          <Route path="class/:id" element={<ClassLink />} />
           <Route path="reports" element={<Reports />} />
-          <Route path="teacher-reports" element={<TeacherReports />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="settings" element={<Settings />} />
+          <Route path="requests" element={<Requests />} />
+          <Route path="demos" element={<Demos />} />
           <Route path="students" element={<Students />} />
-          <Route path="users" element={<Users />} />
-          <Route path="qualifications" element={<QualificationManagement />} />
-          <Route path="sales-executive/students" element={<SalesExecutiveStudents />} />
-          <Route path="sales-executive/demo-classes" element={<SalesDemoClasses />} />
-          <Route path="departments" element={<Departments />} />
-          <Route path="academic-portal" element={<AcademicHeadPortal />} />
-          <Route path="sales-management">
-            <Route path="dashboard" element={<SalesDashboard />} />
-            <Route path="executives" element={<SalesExecutives />} />
-            <Route path="registrations" element={<SalesRegistrations />} />
-            <Route path="reports" element={<SalesReports />} />
-          </Route>
+          {(isAdmin || role === "accountant") && <Route path="payments" element={<Payments />} />}
+          {(isAdmin || role === "accountant") && <Route path="teacher-pay" element={<TeacherPay />} />}
+          {isAdmin && <Route path="admissions" element={<AdminAdmissions />} />}
+          {isAdmin && <Route path="people" element={<People />} />}
+          {isAdmin && <Route path="rates" element={<Rates />} />}
+          {isAdmin && <Route path="settings" element={<SettingsPage />} />}
+          {isAdmin && <Route path="audit" element={<Audit />} />}
+          {(isAdmin || isHead) && <Route path="assign" element={<Assign />} />}
+          {(isAdmin || isHead) && <Route path="timetable" element={<Timetable />} />}
+          {(isAdmin || isHead) && <Route path="teachers" element={<Teachers />} />}
+          {role === "teacher" && <Route path="my-students" element={<MyStudents />} />}
+          {role === "teacher" && <Route path="earnings" element={<Earnings />} />}
+          {role === "teacher" && <Route path="availability" element={<Availability />} />}
+          {role === "student" && <Route path="classes" element={<StudentClasses />} />}
         </Route>
-        
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
