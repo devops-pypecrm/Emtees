@@ -173,6 +173,8 @@ export default function SettingsPage() {
   // Academic Rules
   const [classDurationThreshold, setClassDurationThreshold] = useState(20);
   const [absentConsecutiveThreshold, setAbsentConsecutiveThreshold] = useState(7);
+  const [reconnectionWindow, setReconnectionWindow] = useState(5);
+  const [courseValidityDays, setCourseValidityDays] = useState(60);
   const academicRulesQuery = trpc.admin.getAcademicRuleSettings.useQuery(undefined, {
     enabled: isActualAdmin,
   });
@@ -180,6 +182,8 @@ export default function SettingsPage() {
     if (academicRulesQuery.data) {
       setClassDurationThreshold(academicRulesQuery.data.class_duration_threshold ?? 20);
       setAbsentConsecutiveThreshold(academicRulesQuery.data.absent_consecutive_threshold ?? 7);
+      setReconnectionWindow(academicRulesQuery.data.reconnection_window_minutes ?? 5);
+      setCourseValidityDays(academicRulesQuery.data.course_validity_days ?? 60);
     }
   }, [academicRulesQuery.data]);
   const updateAcademicRulesMut = trpc.admin.updateAcademicRuleSettings.useMutation({
@@ -730,6 +734,18 @@ export default function SettingsPage() {
                     onChange={(e) => setAbsentConsecutiveThreshold(parseInt(e.target.value) || 7)}
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reconnect-window" className="text-sm font-medium">Reconnection Window (minutes)</Label>
+                  <p className="text-xs text-gray-500">A dropped connection that returns within this time continues the same session. Default: 5 min.</p>
+                  <Input id="reconnect-window" type="number" min={0} max={60} value={reconnectionWindow}
+                    onChange={(e) => setReconnectionWindow(Math.max(0, parseInt(e.target.value) || 0))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="validity-days" className="text-sm font-medium">Course Validity (days)</Label>
+                  <p className="text-xs text-gray-500">Days a student has to use their classes, counted from the first qualifying class. Default: 60.</p>
+                  <Input id="validity-days" type="number" min={1} max={730} value={courseValidityDays}
+                    onChange={(e) => setCourseValidityDays(parseInt(e.target.value) || 60)} />
+                </div>
                 <Button
                   className="bg-orange-600 hover:bg-orange-700 text-white"
                   disabled={updateAcademicRulesMut.isPending}
@@ -737,6 +753,8 @@ export default function SettingsPage() {
                     updateAcademicRulesMut.mutate({
                       class_duration_threshold: classDurationThreshold,
                       absent_consecutive_threshold: absentConsecutiveThreshold,
+                      reconnection_window_minutes: reconnectionWindow,
+                      course_validity_days: courseValidityDays,
                     })
                   }
                 >

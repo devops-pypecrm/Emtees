@@ -3,7 +3,8 @@ import { getDb } from "../queries/connection";
 import { attendanceEvents, attendance, classLedgerTransactions, classes, users, profiles, batches, batchEnrollments, classBatches, systemSettings, oneToOneSessions } from "@db/schema";
 import { recalculateSalaryInternal } from "../routers/admin";
 import { NotificationService } from "./notificationService";
-import { computeParticipantMinutes, REJOIN_GRACE_MINUTES as SHARED_REJOIN_GRACE_MINUTES } from "./sessionMinutes";
+import { computePair, REJOIN_GRACE_MINUTES as SHARED_REJOIN_GRACE_MINUTES } from "./sessionMinutes";
+import { getNumberSetting } from "./settings";
 
 // A class counts only if both parties stayed at least this many minutes (set to 20 by the owner).
 export const DEFAULT_CLASS_DURATION_THRESHOLD = 20;
@@ -31,7 +32,7 @@ type OutcomeCtx = {
  * (once). Shared by the final evaluation and by the live "minimum reached" check, so both produce
  * exactly the same records. Sends no notifications.
  */
-async function applyStudentOutcome(c: OutcomeCtx, studentId: number, duration: number, finalStatus: "present" | "absent") {
+async function applyStudentOutcome(c: OutcomeCtx, studentId: number, duration: number, finalStatus: "present" | "absent" | "interrupted") {
   const { db, cls, classId, oneToOneSessionId, isOneToOne, teacherId, events } = c;
   const classEndTime = c.endTime;
     // Upsert attendance record
@@ -112,8 +113,8 @@ async function applyStudentOutcome(c: OutcomeCtx, studentId: number, duration: n
         if (!enrollment || !enrollment.isRejoin) {
           const [profile] = await db.select().from(profiles).where(eq(profiles.userId, studentId));
           if (profile && !profile.validityEndDate) {
-            const allocated = profile.totalAllocatedSessions || 0;
-            const daysValid = allocated * 2; // double the applicable number of classes
+            // SRS: validity runs from the first qualifying class for a fixed number of days (admin setting).
+            const daysValid = await getNumberSetting(db, "course_validity_days");
             const validityDate = new Date();
             validityDate.setDate(validityDate.getDate() + daysValid);
             
@@ -158,16 +159,14 @@ export async function recordProgressIfValid(classId?: number, oneToOneSessionId?
   if (isOneToOne && cls.lastHeartbeatAt && now.getTime() - new Date(cls.lastHeartbeatAt).getTime() > 3 * 60000) return false;
 
   const threshold = await getClassDurationThreshold(db);
-  const minutes = computeParticipantMinutes(events, now);
-  if ((minutes[teacherId] || 0) < threshold) return false;
-
+  const window = await getNumberSetting(db, "reconnection_window_minutes");
   const studentIds = isOneToOne
     ? [cls.studentId as number]
-    : Object.keys(minutes).map(Number).filter((id) => id !== teacherId);
+    : Array.from(new Set(events.map((e: any) => e.userId as number))).filter((id) => id !== teacherId);
 
   const recorded: number[] = [];
   for (const studentId of studentIds) {
-    const duration = minutes[studentId] || 0;
+    const duration = computePair(events, teacherId, studentId, now, window).qualifyingMinutes;
     if (duration < threshold) continue;
     const ref = isOneToOne
       ? eq(classLedgerTransactions.referenceOneToOneId, oneToOneSessionId!)
@@ -222,40 +221,42 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
 
   const events = await db.select().from(attendanceEvents).where(eventsQuery).orderBy(attendanceEvents.timestamp);
   
-  // Minutes per person: the same shared calculation every report screen uses (see lib/sessionMinutes.ts).
+  // Qualifying time per student = time BOTH were in the call together, within one logical session
+  // (reconnections inside the window are joined). Same shared calculation every report screen uses.
   const classEndTime = cls.endedAt || cls.completedAt || new Date();
-  const userDurations: Record<number, number> = computeParticipantMinutes(events, classEndTime);
-
-  // Fallback for 1-to-1: when the Jitsi webhook never delivered events (misconfigured / blocked),
-  // use the minute-by-minute heartbeat counters recorded by the client apps.
-  if (isOneToOne) {
-    if (!userDurations[cls.teacherId] && cls.teacherDuration) userDurations[cls.teacherId] = cls.teacherDuration;
-    if (!userDurations[cls.studentId] && cls.studentDuration) userDurations[cls.studentId] = cls.studentDuration;
-  }
-
-  // 3. Determine if teacher met the configurable duration threshold
   const durationThreshold = await getClassDurationThreshold(db);
+  const window = await getNumberSetting(db, "reconnection_window_minutes");
   const teacherId = cls.teacherId;
-  const teacherDuration = userDurations[teacherId] || 0;
-  const teacherValid = teacherDuration >= durationThreshold;
-
-  // 4. Determine student validities and create Ledger Debits
-  const students = isOneToOne 
+  const students: number[] = isOneToOne
     ? [cls.studentId]
-    : Object.keys(userDurations).map(Number).filter(id => id !== teacherId);
+    : Array.from(new Set(events.map((e: any) => e.userId as number))).filter((id) => id !== teacherId);
+
+  type Res = { qualifying: number; status: "present" | "absent" | "interrupted" };
+  const results = new Map<number, Res>();
+  let teacherDuration = 0;
+  for (const studentId of students) {
+    const pair = computePair(events, teacherId, studentId, classEndTime, window);
+    let qualifying = pair.qualifyingMinutes;
+    let teacherOwn = pair.teacherMinutes;
+    // Fallback for 1-to-1: when no join/leave events were ever delivered, use the heartbeat counters.
+    if (isOneToOne && !events.length) {
+      qualifying = Math.min(cls.teacherDuration || 0, cls.studentDuration || 0);
+      teacherOwn = cls.teacherDuration || 0;
+    }
+    teacherDuration = Math.max(teacherDuration, teacherOwn);
+    const ok = qualifying >= durationThreshold;
+    results.set(studentId, {
+      qualifying,
+      status: ok ? "present" : pair.sessions.length > 1 ? "interrupted" : "absent",
+    });
+  }
+  const teacherValid = [...results.values()].some((r) => r.status === "present");
 
   for (const studentId of students) {
-    const duration = userDurations[studentId] || 0;
-    const studentValid = duration >= durationThreshold;
-    
-    let finalStatus: "present" | "absent" = "absent";
-    if (teacherValid && studentValid) {
-      finalStatus = "present";
-    }
-    
+    const r = results.get(studentId)!;
     await applyStudentOutcome(
       { db, cls, classId, oneToOneSessionId, isOneToOne, teacherId, events, endTime: classEndTime },
-      studentId, duration, finalStatus
+      studentId, r.qualifying, r.status
     );
   }
 
@@ -271,7 +272,7 @@ export async function evaluateClassCompletion(classId?: number, oneToOneSessionI
   if (isOneToOne) {
     await db.update(oneToOneSessions).set({
       teacherDuration: Math.floor(teacherDuration),
-      studentDuration: Math.floor(userDurations[cls.studentId] || 0),
+      studentDuration: Math.floor(results.get(cls.studentId)?.qualifying || 0),
       // The heartbeat counter double-counts (teacher + student each add 1/min); the real class
       // length is the teacher's time in the call.
       actualDuration: Math.floor(teacherDuration),

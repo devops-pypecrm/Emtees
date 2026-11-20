@@ -2141,12 +2141,14 @@ export const adminRouter = createRouter({
   getAcademicRuleSettings: strictAdminQuery.query(async () => {
     const db = getDb();
     const settingsList = await db.query.systemSettings.findMany({
-      where: (s, { inArray }) => inArray(s.key, ["class_duration_threshold", "absent_consecutive_threshold"]),
+      where: (s, { inArray }) => inArray(s.key, ["class_duration_threshold", "absent_consecutive_threshold", "reconnection_window_minutes", "course_validity_days"]),
     });
     const map = new Map(settingsList.map((s) => [s.key, s.value]));
     return {
       class_duration_threshold: parseInt(map.get("class_duration_threshold") || "20", 10),
       absent_consecutive_threshold: parseInt(map.get("absent_consecutive_threshold") || "7", 10),
+      reconnection_window_minutes: parseInt(map.get("reconnection_window_minutes") || "5", 10),
+      course_validity_days: parseInt(map.get("course_validity_days") || "60", 10),
     };
   }),
 
@@ -2154,6 +2156,8 @@ export const adminRouter = createRouter({
     .input(z.object({
       class_duration_threshold: z.number().int().min(1).max(120),
       absent_consecutive_threshold: z.number().int().min(1).max(30),
+      reconnection_window_minutes: z.number().int().min(0).max(60).default(5),
+      course_validity_days: z.number().int().min(1).max(730).default(60),
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -2167,6 +2171,8 @@ export const adminRouter = createRouter({
       };
       await upsert("class_duration_threshold", String(input.class_duration_threshold));
       await upsert("absent_consecutive_threshold", String(input.absent_consecutive_threshold));
+      await upsert("reconnection_window_minutes", String(input.reconnection_window_minutes));
+      await upsert("course_validity_days", String(input.course_validity_days));
       return { success: true };
     }),
 

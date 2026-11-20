@@ -313,6 +313,10 @@ export async function applyMigrations() {
     await client.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "department" varchar(255);`);
     await client.query(`ALTER TABLE "profiles" ADD COLUMN IF NOT EXISTS "department" varchar(255);`);
 
+    console.log("Adding attendance statuses interrupted / technical_issue...");
+    await client.query(`ALTER TYPE "attendance_status" ADD VALUE IF NOT EXISTS 'interrupted';`);
+    await client.query(`ALTER TYPE "attendance_status" ADD VALUE IF NOT EXISTS 'technical_issue';`);
+
     console.log("Creating holidays table...");
     await client.query(`
       CREATE TABLE IF NOT EXISTS "holidays" (
