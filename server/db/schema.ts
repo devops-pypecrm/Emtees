@@ -281,34 +281,6 @@ export const batchEnrollments = pgTable(
 );
 
 // Messages (Chat)
-export const messages = pgTable(
-  "messages",
-  {
-    id: serial("id").primaryKey(),
-    batchId: bigint("batch_id", { mode: "number" })
-      .notNull()
-      .references(() => batches.id, { onDelete: "cascade" }),
-    senderId: bigint("sender_id", { mode: "number" })
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    type: messageTypeEnum("type").notNull().default("text"),
-    content: text("content").notNull(),
-    mediaUrl: varchar("media_url", { length: 500 }),
-    replyToId: bigint("reply_to_id", { mode: "number" }),
-    reactions: json("reactions"),
-    isAnnouncement: boolean("is_announcement").default(false),
-    deletedAt: timestamp("deleted_at"),
-    deletedForUsers: json("deleted_for_users"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    batchIdIdx: index("msg_batch_idx").on(table.batchId),
-    senderIdIdx: index("msg_sender_idx").on(table.senderId),
-    createdAtIdx: index("msg_created_idx").on(table.createdAt),
-  })
-);
-
-// Classes (Live Sessions)
 export const classes = pgTable("classes", {
   id: serial("id").primaryKey(),
   batchId: bigint("batch_id", { mode: "number" })
@@ -588,22 +560,6 @@ export const teacherSalaryConfigAuditLogs = pgTable("teacher_salary_config_audit
 });
 
 // Feedback
-export const feedback = pgTable("feedback", {
-  id: serial("id").primaryKey(),
-  studentId: bigint("student_id", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  teacherId: bigint("teacher_id", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  classId: bigint("class_id", { mode: "number" }).references(() => classes.id),
-  batchId: bigint("batch_id", { mode: "number" }).references(() => batches.id, { onDelete: "cascade" }),
-  rating: integer("rating").notNull(),
-  comment: text("comment"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Notifications
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
   userId: bigint("user_id", { mode: "number" })
@@ -618,64 +574,6 @@ export const notifications = pgTable("notifications", {
 });
 
 // Announcements
-export const announcements = pgTable("announcements", {
-  id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
-  description: text("description").notNull(),
-  audienceType: varchar("audience_type", { length: 50 }).notNull(), // 'all' | 'students' | 'teachers' | 'batch' | 'course'
-  audienceId: integer("audience_id"), // holds batchId or courseId if type is 'batch' or 'course'
-  expiresAt: timestamp("expires_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Announcement Dismissals
-export const announcementDismissals = pgTable("announcement_dismissals", {
-  id: serial("id").primaryKey(),
-  announcementId: integer("announcement_id")
-    .notNull()
-    .references(() => announcements.id, { onDelete: "cascade" }),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  dismissedAt: timestamp("dismissed_at").defaultNow().notNull(),
-});
-
-// Discipline / Violations
-export const violations = pgTable("violations", {
-  id: serial("id").primaryKey(),
-  userId: bigint("user_id", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  reportedBy: bigint("reported_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
-  type: varchar("type", { length: 100 }).notNull(), // Kept for backward compatibility
-  description: text("description").notNull(),
-  action: varchar("action", { length: 100 }), // Kept for backward compatibility
-  status: varchar("status", { length: 20 }).default("active").notNull(), // 'active' | 'resolved'
-  batch: varchar("batch", { length: 255 }),
-  level: varchar("level", { length: 50 }).notNull().default("Warning"), // 'Warning' | 'Final Warning' | 'Suspension'
-  reason: varchar("reason", { length: 255 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  resolvedAt: timestamp("resolved_at"),
-});
-
-// Learning Materials
-export const learningMaterials = pgTable("learning_materials", {
-  id: serial("id").primaryKey(),
-  batchId: bigint("batch_id", { mode: "number" })
-    .notNull()
-    .references(() => batches.id, { onDelete: "cascade" }),
-  title: varchar("title", { length: 255 }).notNull(),
-  description: text("description"),
-  type: materialTypeEnum("material_type").notNull().default("text"),
-  contentUrl: varchar("content_url", { length: 500 }),
-  scheduledDate: timestamp("scheduled_date"),
-  createdBy: bigint("created_by", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// ID Sequences for role-based unique IDs
 export const idSequences = pgTable("id_sequences", {
   rolePrefix: varchar("role_prefix", { length: 10 }).primaryKey(),
   lastValue: integer("last_value").notNull().default(0),
@@ -692,76 +590,23 @@ export type StudentIdSequence = typeof studentIdSequence.$inferSelect;
 export type InsertStudentIdSequence = typeof studentIdSequence.$inferInsert;
 
 // Private Messages Table
-export const privateMessages = pgTable(
-  "private_messages",
-  {
-    id: serial("id").primaryKey(),
-    senderId: bigint("sender_id", { mode: "number" })
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    receiverId: bigint("receiver_id", { mode: "number" })
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    content: text("content").notNull(),
-    type: messageTypeEnum("type").notNull().default("text"),
-    mediaUrl: varchar("media_url", { length: 500 }),
-    isRead: boolean("is_read").default(false).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    deletedAt: timestamp("deleted_at"),
-  },
-  (table) => ({
-    senderIdx: index("pm_sender_idx").on(table.senderId),
-    receiverIdx: index("pm_receiver_idx").on(table.receiverId),
-    createdAtIdx: index("pm_created_idx").on(table.createdAt),
-  })
-);
-
-// Private Message Audit Logs Table
-export const privateMessageAuditLogs = pgTable(
-  "private_message_audit_logs",
-  {
-    id: serial("id").primaryKey(),
-    adminId: bigint("admin_id", { mode: "number" })
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    action: varchar("action", { length: 50 }).notNull(), // 'access' | 'send' | 'edit' | 'delete'
-    senderId: bigint("sender_id", { mode: "number" }),
-    receiverId: bigint("receiver_id", { mode: "number" }),
-    messageId: bigint("message_id", { mode: "number" }),
-    details: text("details"),
-    performedAt: timestamp("performed_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    adminIdx: index("pm_audit_admin_idx").on(table.adminId),
-    performedAtIdx: index("pm_audit_time_idx").on(table.performedAt),
-  })
-);
-
 export type User = typeof users.$inferSelect;
 export type Qualification = typeof qualifications.$inferSelect;
 export type InsertQualification = typeof qualifications.$inferInsert;
 export type QualificationAuditLog = typeof qualificationAuditLogs.$inferSelect;
-export type PrivateMessageAuditLog = typeof privateMessageAuditLogs.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
 export type Batch = typeof batches.$inferSelect;
 export type Module = typeof modules.$inferSelect;
-export type Message = typeof messages.$inferSelect;
 export type Class = typeof classes.$inferSelect;
 export type Attendance = typeof attendance.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type StudentFeeConfiguration = typeof studentFeeConfigurations.$inferSelect;
 export type InsertStudentFeeConfiguration = typeof studentFeeConfigurations.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
-export type FeedbackItem = typeof feedback.$inferSelect;
 export type FlexibilityRequest = typeof flexibilityRequests.$inferSelect;
 export type BatchFeeAuditLog = typeof batchFeeAuditLogs.$inferSelect;
 export type BatchAuditLog = typeof batchAuditLogs.$inferSelect;
-export type PrivateMessage = typeof privateMessages.$inferSelect;
-export type Announcement = typeof announcements.$inferSelect;
-export type InsertAnnouncement = typeof announcements.$inferInsert;
-export type AnnouncementDismissal = typeof announcementDismissals.$inferSelect;
-export type InsertAnnouncementDismissal = typeof announcementDismissals.$inferInsert;
 export type ClassBatch = typeof classBatches.$inferSelect;
 export type InsertClassBatch = typeof classBatches.$inferInsert;
 
@@ -890,259 +735,6 @@ export type SystemSetting = typeof systemSettings.$inferSelect;
 export type InsertSystemSetting = typeof systemSettings.$inferInsert;
 
 // Learning Notes
-export const learningNotes = pgTable("learning_notes", {
-  id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
-  description: text("description"),
-  moduleId: bigint("module_id", { mode: "number" })
-    .notNull()
-    .references(() => modules.id, { onDelete: "cascade" }),
-  batchId: bigint("batch_id", { mode: "number" })
-    .notNull()
-    .references(() => batches.id, { onDelete: "cascade" }),
-  fileType: varchar("file_type", { length: 50 }).notNull(), // 'pdf', 'docx', 'ppt', 'pptx'
-  uploadedBy: bigint("uploaded_by", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  fileUrl: text("file_url").notNull(), // contains the base64 or file URL
-  uploadDate: timestamp("upload_date").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Learning Videos
-export const learningVideos = pgTable("learning_videos", {
-  id: serial("id").primaryKey(),
-  sessionType: varchar("session_type", { length: 20 }).notNull(), // 'one_to_one' | 'group'
-  studentId: bigint("student_id", { mode: "number" })
-    .references(() => users.id, { onDelete: "cascade" }), // nullable for group
-  batchId: bigint("batch_id", { mode: "number" })
-    .references(() => batches.id, { onDelete: "cascade" }), // nullable for 1-to-1
-  teacherId: bigint("teacher_id", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  moduleId: bigint("module_id", { mode: "number" })
-    .notNull()
-    .references(() => modules.id, { onDelete: "cascade" }),
-  sessionDate: timestamp("session_date").notNull(),
-  duration: integer("duration").notNull(), // duration in minutes
-  videoUrl: text("video_url").notNull(),
-  thumbnailUrl: text("thumbnail_url"),
-  uploadedBy: bigint("uploaded_by", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Assignments
-export const assignments = pgTable("assignments", {
-  id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
-  description: text("description"),
-  moduleId: bigint("module_id", { mode: "number" })
-    .notNull()
-    .references(() => modules.id, { onDelete: "cascade" }),
-  batchId: bigint("batch_id", { mode: "number" })
-    .notNull()
-    .references(() => batches.id, { onDelete: "cascade" }),
-  dueDate: timestamp("due_date").notNull(),
-  attachmentUrl: text("attachment_url"),
-  attachmentName: varchar("attachment_name", { length: 255 }),
-  createdBy: bigint("created_by", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Assignment Submissions
-export const assignmentSubmissions = pgTable("assignment_submissions", {
-  id: serial("id").primaryKey(),
-  studentId: bigint("student_id", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  assignmentId: bigint("assignment_id", { mode: "number" })
-    .notNull()
-    .references(() => assignments.id, { onDelete: "cascade" }),
-  submissionFileUrl: text("submission_file_url").notNull(),
-  submissionFileName: varchar("submission_file_name", { length: 255 }),
-  submittedDate: timestamp("submitted_date").defaultNow().notNull(),
-  marks: integer("marks"),
-  feedback: text("feedback"),
-  status: varchar("status", { length: 50 }).notNull().default("Submitted"), // 'Submitted', 'Reviewed', 'Completed'
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export type LearningNote = typeof learningNotes.$inferSelect;
-export type InsertLearningNote = typeof learningNotes.$inferInsert;
-export type LearningVideo = typeof learningVideos.$inferSelect;
-export type InsertLearningVideo = typeof learningVideos.$inferInsert;
-export type Assignment = typeof assignments.$inferSelect;
-export type InsertAssignment = typeof assignments.$inferInsert;
-export type AssignmentSubmission = typeof assignmentSubmissions.$inferSelect;
-export type InsertAssignmentSubmission = typeof assignmentSubmissions.$inferInsert;
-
-// Community Lessons
-export const communityLessons = pgTable("community_lessons", {
-  id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
-  description: text("description"),
-  type: varchar("type", { length: 50 }).notNull(), // 'pdf' | 'docx' | 'ppt' | 'pptx' | 'video' | 'youtube' | 'text'
-  contentUrl: text("content_url"), // base64 or video url
-  youtubeUrl: varchar("youtube_url", { length: 255 }),
-  textContent: text("text_content"),
-  fileName: varchar("file_name", { length: 255 }),
-  publishedBy: bigint("published_by", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  publishedAt: timestamp("published_at").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Community Discussion Posts
-export const communityPosts = pgTable("community_posts", {
-  id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }),
-  content: text("content").notNull(),
-  authorId: bigint("author_id", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  isPinned: boolean("is_pinned").default(false).notNull(),
-  mediaUrl: text("media_url"),
-  mediaName: varchar("media_name", { length: 255 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Community Comments (including nested replies)
-export const communityComments = pgTable("community_comments", {
-  id: serial("id").primaryKey(),
-  postId: bigint("post_id", { mode: "number" })
-    .notNull()
-    .references(() => communityPosts.id, { onDelete: "cascade" }),
-  authorId: bigint("author_id", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  content: text("content").notNull(),
-  parentId: integer("parent_id"), // self-reference using raw integer to avoid circular type ref in drizzle schemas
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Community Post Reactions (Likes)
-export const communityPostReactions = pgTable(
-  "community_post_reactions",
-  {
-    id: serial("id").primaryKey(),
-    postId: bigint("post_id", { mode: "number" })
-      .notNull()
-      .references(() => communityPosts.id, { onDelete: "cascade" }),
-    userId: bigint("user_id", { mode: "number" })
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    reaction: varchar("reaction", { length: 50 }).notNull().default("like"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    uniquePostUserReaction: uniqueIndex("unique_post_user_reaction_idx").on(table.postId, table.userId),
-  })
-);
-
-// Community Career Opportunities
-export const communityCareers = pgTable("community_careers", {
-  id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
-  company: varchar("company", { length: 255 }).notNull(),
-  type: varchar("type", { length: 100 }).notNull(), // 'Job' | 'Internship' | 'Freelance' | 'Guidance'
-  location: varchar("location", { length: 255 }).notNull(),
-  description: text("description").notNull(),
-  link: varchar("link", { length: 500 }),
-  publishedBy: bigint("published_by", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Community Saved Career Opportunities
-export const communitySavedCareers = pgTable(
-  "community_saved_careers",
-  {
-    id: serial("id").primaryKey(),
-    userId: bigint("user_id", { mode: "number" })
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    careerId: bigint("career_id", { mode: "number" })
-      .notNull()
-      .references(() => communityCareers.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    uniqueUserCareer: uniqueIndex("unique_user_career_idx").on(table.userId, table.careerId),
-  })
-);
-
-// Community Student Success Stories
-export const communitySuccessStories = pgTable("community_success_stories", {
-  id: serial("id").primaryKey(),
-  studentName: varchar("student_name", { length: 255 }).notNull(),
-  courseCompleted: varchar("course_completed", { length: 255 }).notNull(),
-  achievement: text("achievement").notNull(),
-  photoUrl: text("photo_url"),
-  testimonial: text("testimonial").notNull(),
-  publishedBy: bigint("published_by", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Community Lesson Views (for analytics)
-export const communityLessonViews = pgTable(
-  "community_lesson_views",
-  {
-    id: serial("id").primaryKey(),
-    lessonId: bigint("lesson_id", { mode: "number" })
-      .notNull()
-      .references(() => communityLessons.id, { onDelete: "cascade" }),
-    userId: bigint("user_id", { mode: "number" })
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    viewedAt: timestamp("viewed_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    uniqueLessonUserView: uniqueIndex("unique_lesson_user_view_idx").on(table.lessonId, table.userId),
-  })
-);
-
-// Community Daily Active Users (for analytics)
-export const communityActiveUsers = pgTable(
-  "community_active_users",
-  {
-    id: serial("id").primaryKey(),
-    userId: bigint("user_id", { mode: "number" })
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    activeDate: varchar("active_date", { length: 10 }).notNull(), // 'YYYY-MM-DD'
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    uniqueUserActiveDate: uniqueIndex("unique_user_active_date_idx").on(table.userId, table.activeDate),
-  })
-);
-
-export type CommunityLesson = typeof communityLessons.$inferSelect;
-export type InsertCommunityLesson = typeof communityLessons.$inferInsert;
-export type CommunityPost = typeof communityPosts.$inferSelect;
-export type InsertCommunityPost = typeof communityPosts.$inferInsert;
-export type CommunityComment = typeof communityComments.$inferSelect;
-export type InsertCommunityComment = typeof communityComments.$inferInsert;
-export type CommunityPostReaction = typeof communityPostReactions.$inferSelect;
-export type InsertCommunityPostReaction = typeof communityPostReactions.$inferInsert;
-export type CommunityCareer = typeof communityCareers.$inferSelect;
-export type InsertCommunityCareer = typeof communityCareers.$inferInsert;
-export type CommunitySavedCareer = typeof communitySavedCareers.$inferSelect;
-export type InsertCommunitySavedCareer = typeof communitySavedCareers.$inferInsert;
-export type CommunitySuccessStory = typeof communitySuccessStories.$inferSelect;
-export type InsertCommunitySuccessStory = typeof communitySuccessStories.$inferInsert;
-export type CommunityLessonView = typeof communityLessonViews.$inferSelect;
-export type CommunityActiveUser = typeof communityActiveUsers.$inferSelect;
-
-// Sales Executives Table
 export const salesExecutives = pgTable(
   "sales_executives",
   {
@@ -1236,51 +828,6 @@ export type StudentClassAllocation = typeof studentClassAllocations.$inferSelect
 export type InsertStudentClassAllocation = typeof studentClassAllocations.$inferInsert;
 
 // Performance configurations (criteria/weightage templates)
-export const performanceConfigs = pgTable("performance_configs", {
-  id: serial("id").primaryKey(),
-  type: varchar("type", { length: 20 }).notNull(), // 'student' or 'teacher'
-  name: varchar("name", { length: 255 }).notNull(),
-  criteria: json("criteria").notNull(), // weightages, qualitative items, etc.
-  isDefault: boolean("is_default").default(false).notNull(),
-  createdBy: bigint("created_by", { mode: "number" })
-    .references(() => users.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-// Performance reports (assessments)
-export const performanceReports = pgTable("performance_reports", {
-  id: serial("id").primaryKey(),
-  parentReportId: integer("parent_report_id").references((): any => performanceReports.id, { onDelete: "set null" }),
-  version: integer("version").default(1).notNull(),
-  isLatest: boolean("is_latest").default(true).notNull(),
-  targetUserId: bigint("target_user_id", { mode: "number" })
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  type: varchar("type", { length: 20 }).notNull(), // 'student' or 'teacher'
-  configId: bigint("config_id", { mode: "number" })
-    .references(() => performanceConfigs.id, { onDelete: "set null" }),
-  assessmentPeriod: varchar("assessment_period", { length: 50 }).notNull(), // 'monthly', 'quarterly', 'semester', 'yearly', 'custom'
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date").notNull(),
-  status: varchar("status", { length: 20 }).default("draft").notNull(), // 'draft', 'published', 'archived'
-  autoMetrics: json("auto_metrics").notNull(),
-  qualitativeScores: json("qualitative_scores").notNull(), // empty if not used, or for custom qualitative criteria (optional)
-  totalScore: decimal("total_score", { precision: 5, scale: 2 }).notNull(),
-  grade: varchar("grade", { length: 10 }),
-  remarks: text("remarks"),
-  createdBy: bigint("created_by", { mode: "number" })
-    .references(() => users.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export type PerformanceConfig = typeof performanceConfigs.$inferSelect;
-export type InsertPerformanceConfig = typeof performanceConfigs.$inferInsert;
-export type PerformanceReport = typeof performanceReports.$inferSelect;
-export type InsertPerformanceReport = typeof performanceReports.$inferInsert;
-
-// Sales Closures (Single Source of Truth for Sales)
 export const salesClosures = pgTable("sales_closures", {
   id: serial("id").primaryKey(),
   closingDate: timestamp("closing_date").notNull(),
@@ -1346,80 +893,6 @@ export const salesClosuresRelations = relations(salesClosures, ({ one }) => ({
 }));
 
 // Sales Points Engine Rules
-export const salesPointsRules = pgTable("sales_points_rules", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  caCategoryMatch: varchar("ca_category_match", { length: 100 }), // null means any
-  courseMatch: varchar("course_match", { length: 255 }), // null means any, or "O_TO_O"
-  minTotalFee: decimal("min_total_fee", { precision: 10, scale: 2 }),
-  maxTotalFee: decimal("max_total_fee", { precision: 10, scale: 2 }),
-  minPaymentPercent: decimal("min_payment_percent", { precision: 5, scale: 2 }), // e.g. 100 for full, 50 for half
-  fixedPointsAward: decimal("fixed_points_award", { precision: 10, scale: 2 }),
-  formula: text("formula"), // e.g. "(paymentAmount / totalFee) * 5"
-  priority: integer("priority").default(0).notNull(), // higher priority runs first
-  isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-export type SalesPointsRule = typeof salesPointsRules.$inferSelect;
-export type InsertSalesPointsRule = typeof salesPointsRules.$inferInsert;
-
-// Sales Leads (Deprecated but kept for historical data and to avoid migration issues)
-export const salesLeads = pgTable("sales_leads", {
-  id: serial("id").primaryKey(),
-  studentName: varchar("student_name", { length: 255 }).notNull(),
-  phone: varchar("phone", { length: 50 }),
-  address: text("address"),
-  remarks: text("remarks"),
-  status: varchar("status", { length: 50 }).default("New").notNull(),
-  caId: bigint("ca_id", { mode: "number" }).references(() => salesExecutives.id, { onDelete: "set null" }),
-  isDeleted: boolean("is_deleted").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-export type SalesLead = typeof salesLeads.$inferSelect;
-export type InsertSalesLead = typeof salesLeads.$inferInsert;
-
-export const salesLeadsRelations = relations(salesLeads, ({ one }) => ({
-  salesExecutive: one(salesExecutives, {
-    fields: [salesLeads.caId],
-    references: [salesExecutives.id],
-  }),
-}));
-
-// Lead Campaigns (Replaces old salesLeads)
-export const leadCampaigns = pgTable("lead_campaigns", {
-  id: serial("id").primaryKey(),
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date").notNull(),
-  month: varchar("month", { length: 50 }).notNull(),
-  caId: bigint("ca_id", { mode: "number" }).references(() => salesExecutives.id, { onDelete: "set null" }),
-  asmId: bigint("asm_id", { mode: "number" }).references(() => salesExecutives.id, { onDelete: "set null" }),
-  course: varchar("course", { length: 255 }).notNull(),
-  noOfLeads: integer("no_of_leads").default(0).notNull(),
-  amountSpent: decimal("amount_spent", { precision: 10, scale: 2 }).default("0").notNull(),
-  dailyBudget: decimal("daily_budget", { precision: 10, scale: 2 }).default("0").notNull(),
-  isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-export type LeadCampaign = typeof leadCampaigns.$inferSelect;
-export type InsertLeadCampaign = typeof leadCampaigns.$inferInsert;
-
-export const leadCampaignsRelations = relations(leadCampaigns, ({ one }) => ({
-  courseAdvisor: one(salesExecutives, {
-    fields: [leadCampaigns.caId],
-    references: [salesExecutives.id],
-    relationName: "courseAdvisor",
-  }),
-  asm: one(salesExecutives, {
-    fields: [leadCampaigns.asmId],
-    references: [salesExecutives.id],
-    relationName: "asmManager",
-  }),
-}));
-
-// Class Ledger Transactions (Single Source of Truth for class entitlement)
 export const classLedgerTransactions = pgTable("class_ledger_transactions", {
   id: serial("id").primaryKey(),
   studentId: bigint("student_id", { mode: "number" }).notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -1459,20 +932,6 @@ export const attendanceEventsRelations = relations(attendanceEvents, ({ one }) =
 }));
 
 // Custom Report Templates / Configs
-export const reportTemplates = pgTable("report_templates", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  type: varchar("type", { length: 50 }).notNull(), // 'sales_dashboard', 'weekly_report'
-  config: json("config").notNull(), // stores columns, week definitions, filters
-  createdBy: bigint("created_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
-  isGlobal: boolean("is_global").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-export type ReportTemplate = typeof reportTemplates.$inferSelect;
-export type InsertReportTemplate = typeof reportTemplates.$inferInsert;
-
-// ─── Departments (Academic Teams) ────────────────────────────────────────────
 export const departments = pgTable("departments", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull().unique(),

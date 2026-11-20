@@ -2280,9 +2280,7 @@ export default function StudentsPage() {
                 <TabsTrigger value="course" className="flex-none px-4 py-2 rounded-lg transition-all duration-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30 hover:text-slate-800 dark:hover:text-slate-200">Course & Batches</TabsTrigger>
                 <TabsTrigger value="attendance" className="flex-none px-4 py-2 rounded-lg transition-all duration-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30 hover:text-slate-800 dark:hover:text-slate-200">Attendance</TabsTrigger>
                 <TabsTrigger value="fees" className="flex-none px-4 py-2 rounded-lg transition-all duration-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30 hover:text-slate-800 dark:hover:text-slate-200">Fees & Payments</TabsTrigger>
-                <TabsTrigger value="performance" className="flex-none px-4 py-2 rounded-lg transition-all duration-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30 hover:text-slate-800 dark:hover:text-slate-200">Performance</TabsTrigger>
                 <TabsTrigger value="documents" className="flex-none px-4 py-2 rounded-lg transition-all duration-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30 hover:text-slate-800 dark:hover:text-slate-200">Documents</TabsTrigger>
-                <TabsTrigger value="communication" className="flex-none px-4 py-2 rounded-lg transition-all duration-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30 hover:text-slate-800 dark:hover:text-slate-200">Chat History</TabsTrigger>
               </TabsList>
 
               <div className="flex-1 overflow-y-auto pr-1 min-h-0">
@@ -3004,30 +3002,6 @@ export default function StudentsPage() {
                 </TabsContent>
 
                 {/* 5. Performance Reports Tab */}
-                <TabsContent value="performance" className="space-y-4 outline-none">
-                  <div className="space-y-3">
-                    {profileQuery.data.feedback.map((f) => (
-                      <Card key={f.id} className="border-slate-100 shadow-sm bg-slate-50/20">
-                        <CardHeader className="py-2.5 px-4 bg-slate-50 flex flex-row justify-between items-center border-b">
-                          <div className="flex items-center gap-2">
-                            <Award className="w-4 h-4 text-amber-500" />
-                            <span className="text-xs font-bold text-slate-700">Rating: {f.rating}/5</span>
-                          </div>
-                          <span className="text-[10px] text-gray-400 font-mono">{new Date(f.createdAt).toLocaleDateString()}</span>
-                        </CardHeader>
-                        <CardContent className="p-4 text-xs text-slate-600">
-                          <p className="italic">"{f.comment}"</p>
-                          <p className="text-right text-[10px] text-gray-400 font-semibold mt-2">— Teacher: {f.teacher?.name || "Teacher"}</p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                    {profileQuery.data.feedback.length === 0 && (
-                      <div className="text-center py-10 text-slate-400 text-xs">
-                        No performance feedback reports found.
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
 
                 {/* 6. Documents Tab */}
                 <TabsContent value="documents" className="space-y-4 outline-none">
@@ -3101,33 +3075,6 @@ export default function StudentsPage() {
                 </TabsContent>
 
                 {/* 7. Communication History Tab */}
-                <TabsContent value="communication" className="space-y-4 outline-none">
-                  <div className="border rounded-xl bg-slate-50 p-4 max-h-[350px] overflow-y-auto space-y-3">
-                    {profileQuery.data.chatHistory.map((msg) => {
-                      const isOutgoing = msg.senderId !== profileQuery.data!.student.id;
-                      return (
-                        <div key={msg.id} className={`flex ${isOutgoing ? "justify-end" : "justify-start"}`}>
-                          <div className={`p-3 rounded-2xl max-w-[75%] shadow-sm text-xs leading-relaxed ${
-                            isOutgoing
-                              ? "bg-emerald-600 text-white rounded-tr-none"
-                              : "bg-white text-slate-700 border border-slate-100 rounded-tl-none"
-                          }`}>
-                            <div className="flex justify-between items-center gap-6 mb-1 text-[10px] opacity-75 font-semibold">
-                              <span>{isOutgoing ? "Admin/Staff" : msg.sender?.name}</span>
-                              <span className="font-mono">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
-                            </div>
-                            <p>{msg.content}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {profileQuery.data.chatHistory.length === 0 && (
-                      <div className="text-center py-10 text-slate-400 text-xs">
-                        No recent private message exchanges found.
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
               </div>
             </Tabs>
           ) : null}

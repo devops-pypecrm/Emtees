@@ -184,34 +184,6 @@ mobileRouter.delete(
   "/notifications/:id",
   wrap((c, req) => c.notification.delete({ id: Number(req.params.id) }))
 );
-mobileRouter.post(
-  "/notifications/announcements/:id/dismiss",
-  wrap((c, req) => c.notification.dismissAnnouncement({ announcementId: Number(req.params.id) }))
-);
-
-// ---- Private messages / chat ----
-mobileRouter.get(
-  "/messages/conversations",
-  wrap((c) => c.privateMessage.listConversations())
-);
-mobileRouter.get(
-  "/messages/contacts",
-  wrap((c, req) => c.privateMessage.listAvailableContacts(req.query.search ? { search: String(req.query.search) } : undefined))
-);
-mobileRouter.get(
-  "/messages/with/:userId",
-  wrap((c, req) =>
-    c.privateMessage.getConversation({
-      otherUserId: Number(req.params.userId),
-      limit: req.query.limit ? Number(req.query.limit) : undefined,
-      offset: req.query.offset ? Number(req.query.offset) : undefined,
-    })
-  )
-);
-mobileRouter.post(
-  "/messages",
-  wrap((c, req) => c.privateMessage.sendMessage(req.body))
-);
 
 // ---- Student "my" data ----
 mobileRouter.get(
@@ -235,10 +207,6 @@ mobileRouter.post(
   wrap((c, req) => c.student.cancelRequest({ requestId: Number(req.params.id) }))
 );
 mobileRouter.get(
-  "/me/feedback",
-  wrap((c) => c.student.getMyFeedback())
-);
-mobileRouter.get(
   "/me/attendance",
   wrap((c) => c.class.myAttendance())
 );
@@ -253,86 +221,6 @@ mobileRouter.put(
 mobileRouter.post(
   "/me/password",
   wrap((c, req) => c.user.changeMyPassword(req.body))
-);
-mobileRouter.post(
-  "/me/feedback",
-  wrap((c, req) => c.student.submitFeedback(req.body))
-);
-mobileRouter.put(
-  "/me/feedback/:id",
-  wrap((c, req) => c.student.editFeedback({ feedbackId: Number(req.params.id), ...req.body }))
-);
-
-// ---- Learning materials ----
-mobileRouter.get(
-  "/materials",
-  wrap((c, req) => c.learning.listMaterials({ batchId: Number(req.query.batchId) }))
-);
-mobileRouter.post(
-  "/materials",
-  wrap((c, req) => c.learning.createMaterial(req.body))
-);
-
-// ---- Performance ----
-mobileRouter.get(
-  "/performance",
-  wrap((c, req) =>
-    c.performance.listReports({
-      type: req.query.type as "student" | "teacher" | undefined,
-      targetUserId: req.query.targetUserId ? Number(req.query.targetUserId) : undefined,
-      assessmentPeriod: req.query.assessmentPeriod as string | undefined,
-      status: req.query.status as "draft" | "published" | "archived" | undefined,
-      batchId: req.query.batchId ? Number(req.query.batchId) : undefined,
-    })
-  )
-);
-mobileRouter.get(
-  "/performance/:id/history",
-  wrap((c, req) => c.performance.getReportHistory({ reportId: Number(req.params.id) }))
-);
-
-// ---- Discipline ----
-mobileRouter.get(
-  "/discipline",
-  wrap((c) => c.discipline.list())
-);
-mobileRouter.post(
-  "/discipline",
-  wrap((c, req) => c.discipline.create(req.body))
-);
-mobileRouter.get(
-  "/discipline/stats",
-  wrap((c) => c.discipline.getStats())
-);
-
-// ---- Community ----
-mobileRouter.get(
-  "/community/posts",
-  wrap((c) => c.community.listPosts())
-);
-mobileRouter.post(
-  "/community/posts",
-  wrap((c, req) => c.community.createPost(req.body))
-);
-mobileRouter.delete(
-  "/community/posts/:id",
-  wrap((c, req) => c.community.deletePost({ id: Number(req.params.id) }))
-);
-mobileRouter.post(
-  "/community/posts/:id/like",
-  wrap((c, req) => c.community.likePost({ postId: Number(req.params.id) }))
-);
-mobileRouter.get(
-  "/community/posts/:id/comments",
-  wrap((c, req) => c.community.listComments({ postId: Number(req.params.id) }))
-);
-mobileRouter.post(
-  "/community/posts/:id/comments",
-  wrap((c, req) => c.community.createComment({ postId: Number(req.params.id), ...req.body }))
-);
-mobileRouter.delete(
-  "/community/comments/:id",
-  wrap((c, req) => c.community.deleteComment({ id: Number(req.params.id) }))
 );
 
 // ---- App release / update check (see pypecrm-style OTA update system) ----
@@ -374,7 +262,6 @@ mobileRouter.get(
 );
 
 mobileRouter.use("/app-releases", appReleaseRouterExpress);
-
 
 // ───────────── Reports (role-scoped; teacher + student only on mobile) ─────────────
 // Admin / Academic Head reports are web-only.

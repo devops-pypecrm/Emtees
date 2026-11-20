@@ -7,13 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 import NewClosureForm from "@/components/Sales/NewClosureForm";
 import ClosuresList from "@/components/Sales/ClosuresList";
 import SalesReportsView from "@/components/Sales/SalesReportsView";
-import PointsEngineConfig from "@/components/Sales/PointsEngineConfig";
 import HierarchyManager from "@/components/Sales/HierarchyManager";
 import DashboardView from "@/components/Sales/DashboardView";
 import AsmPerformanceReport from "@/components/Sales/AsmPerformanceReport";
-import WeeklyLeaderboard from "@/components/Sales/WeeklyLeaderboard";
-import ReconciliationUpload from "@/components/Sales/ReconciliationUpload";
-import SalesPerformanceReport from "@/components/Sales/SalesPerformanceReport";
 
 export default function SalesDashboard() {
   const { user } = useAuth();
@@ -31,17 +27,13 @@ export default function SalesDashboard() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-auto justify-start">
           <TabsTrigger value="dashboard" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">Dashboard</TabsTrigger>
-          <TabsTrigger value="performance" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">Performance Report</TabsTrigger>
-          <TabsTrigger value="leaderboard" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">Leaderboard</TabsTrigger>
           <TabsTrigger value="closures" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">Closures</TabsTrigger>
-          <TabsTrigger value="reconciliation" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">Reconciliation (IQED)</TabsTrigger>
           <TabsTrigger value="new-closure" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">New Closure (Data Entry)</TabsTrigger>
           <TabsTrigger value="reports" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">Closures List</TabsTrigger>
           <TabsTrigger value="asm-report" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">ASM Report</TabsTrigger>
           {isAdmin && (
             <>
               <TabsTrigger value="hierarchy" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">Hierarchy & Teams</TabsTrigger>
-              <TabsTrigger value="points-engine" className="data-[state=active]:bg-white dark:data-[state=active]:bg-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-white data-[state=active]:shadow">Points Engine</TabsTrigger>
             </>
           )}
         </TabsList>
@@ -50,21 +42,12 @@ export default function SalesDashboard() {
           <DashboardView />
         </TabsContent>
 
-        <TabsContent value="performance" className="mt-6">
-          <SalesPerformanceReport />
-        </TabsContent>
 
-        <TabsContent value="leaderboard" className="mt-6">
-          <WeeklyLeaderboard />
-        </TabsContent>
 
         <TabsContent value="closures" className="mt-6">
           <ClosuresList />
         </TabsContent>
 
-        <TabsContent value="reconciliation" className="mt-6">
-          <ReconciliationUpload />
-        </TabsContent>
 
         <TabsContent value="new-closure" className="mt-6">
           <NewClosureForm onSuccess={() => setActiveTab("closures")} />
@@ -82,9 +65,6 @@ export default function SalesDashboard() {
           <>
             <TabsContent value="hierarchy" className="mt-6">
               <HierarchyManager />
-            </TabsContent>
-            <TabsContent value="points-engine" className="mt-6">
-              <PointsEngineConfig />
             </TabsContent>
           </>
         )}

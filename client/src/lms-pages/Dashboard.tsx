@@ -1015,15 +1015,12 @@ export default function Dashboard() {
             {isTeacher && (
               <>
                 <QuickAction to="/classes" label="My Classes" desc="View & start sessions" />
-                <QuickAction to="/chat" label="Group Chat" desc="Message your batches" />
                 <QuickAction to="/reports" label="Reports" desc="View performance data" />
               </>
             )}
             {user.role === "student" && (
               <>
-                <QuickAction to="/batches" label="My Batches" desc="View enrolled batches" />
-                <QuickAction to="/chat" label="Group Chat" desc="Chat with batch members" />
-                <QuickAction to="/classes" label="Upcoming Classes" desc="See scheduled sessions" />
+                                <QuickAction to="/classes" label="Upcoming Classes" desc="See scheduled sessions" />
                 <QuickAction to="/fees" label="My Fees" desc="View payment status" />
               </>
             )}

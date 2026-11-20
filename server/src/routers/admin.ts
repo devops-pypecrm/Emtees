@@ -3,35 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { eq, desc, and, sql, or, lte, gte, lt, gt, ilike, inArray, isNotNull, asc } from "drizzle-orm";
 import { createRouter, adminQuery, teacherQuery, strictAdminQuery } from "../middleware";
 import { getDb } from "../queries/connection";
-import {
-  payments,
-  teacherSalaries,
-  profiles,
-  users,
-  flexibilityRequests,
-  feedback,
-  notifications,
-  violations,
-  classes,
-  oneToOneSessions,
-  batches,
-  attendance,
-  messages,
-  batchEnrollments,
-  teacherSalaryConfigs,
-  teacherSalaryConfigAuditLogs,
-  modules,
-  systemSettings,
-  sessionAllocationLogs,
-  studentIdSequence,
-  studentClassAllocations,
-  studentFeeConfigurations,
-  classLedgerTransactions,
-  salesClosures,
-  demoClasses,
-  departments,
-  departmentTeachers,
-} from "@db/schema";
+import { payments, teacherSalaries, profiles, users, flexibilityRequests, notifications, classes, oneToOneSessions, batches, attendance, batchEnrollments, teacherSalaryConfigs, teacherSalaryConfigAuditLogs, modules, systemSettings, sessionAllocationLogs, studentIdSequence, studentClassAllocations, studentFeeConfigurations, classLedgerTransactions, salesClosures, demoClasses, departments, departmentTeachers } from "@db/schema";
 import { sendNotification } from "../lib/notificationEngine";
 import { updateStudentSessionBalances } from "../lib/sessionHelper";
 import { recalculateStudentFees } from "../lib/feeHelper";
@@ -346,103 +318,6 @@ recentAttendance,
   };
 }
 
-export async function calculateIncentiveForTeacherMonth(
-  db: ReturnType<typeof getDb>,
-  teacherId: number,
-  month: string
-): Promise<number> {
-  // 1. Fetch completed classes and sessions in this month
-  const groupClassesList = await db.query.classes.findMany({
-    where: and(
-      eq(classes.teacherId, teacherId),
-      eq(classes.status, "completed"),
-      eq(classes.classType, "group"),
-      sql`TO_CHAR(${classes.scheduledAt}, 'YYYY-MM') = ${month}`
-    ),
-  });
-
-  const oneToOneSessionsList = await db.query.oneToOneSessions.findMany({
-    where: and(
-      eq(oneToOneSessions.teacherId, teacherId),
-      eq(oneToOneSessions.status, "completed"),
-      sql`TO_CHAR(${oneToOneSessions.scheduledAt}, 'YYYY-MM') = ${month}`
-    ),
-  });
-
-  const totalClassesConducted = groupClassesList.length + oneToOneSessionsList.length;
-  if (totalClassesConducted === 0) return 0;
-
-  // 2. Teacher attendance
-  // Working days (unique days with completed or scheduled classes in this month)
-  const scheduledGroupDays = await db.select({
-    day: sql`TO_CHAR(${classes.scheduledAt}, 'YYYY-MM-DD')`
-  })
-  .from(classes)
-  .where(and(
-    eq(classes.teacherId, teacherId),
-    eq(classes.status, "completed"),
-    sql`TO_CHAR(${classes.scheduledAt}, 'YYYY-MM') = ${month}`
-  ));
-
-  const scheduledOtoDays = await db.select({
-    day: sql`TO_CHAR(${oneToOneSessions.scheduledAt}, 'YYYY-MM-DD')`
-  })
-  .from(oneToOneSessions)
-  .where(and(
-    eq(oneToOneSessions.teacherId, teacherId),
-    eq(oneToOneSessions.status, "completed"),
-    sql`TO_CHAR(${oneToOneSessions.scheduledAt}, 'YYYY-MM') = ${month}`
-  ));
-
-  const uniqueDays = new Set<string>();
-  scheduledGroupDays.forEach(d => { if (d.day) uniqueDays.add(d.day as string); });
-  scheduledOtoDays.forEach(d => { if (d.day) uniqueDays.add(d.day as string); });
-  const workingDays = uniqueDays.size;
-
-  const absentOtoDays = await db.select({
-    day: sql`TO_CHAR(${oneToOneSessions.scheduledAt}, 'YYYY-MM-DD')`
-  })
-  .from(oneToOneSessions)
-  .where(and(
-    eq(oneToOneSessions.teacherId, teacherId),
-    eq(oneToOneSessions.teacherAttendance, "absent"),
-    sql`TO_CHAR(${oneToOneSessions.scheduledAt}, 'YYYY-MM') = ${month}`
-  ));
-  const absentDays = new Set(absentOtoDays.map(d => d.day as string)).size;
-  const presentDays = Math.max(0, workingDays - absentDays);
-
-  const teacherAttendancePct = workingDays > 0 ? (presentDays / workingDays) * 100 : 100;
-
-  // 3. Average Student Attendance
-  let totalStudentCount = 0;
-  let presentStudentCount = 0;
-  for (const cls of groupClassesList) {
-    const attendanceRecords = await db.query.attendance.findMany({
-      where: eq(attendance.classId, cls.id),
-    });
-    totalStudentCount += attendanceRecords.length;
-    presentStudentCount += attendanceRecords.filter((r) => r.status === "present" || r.status === "late").length;
-  }
-  const studentAttendancePct = totalStudentCount > 0 ? (presentStudentCount / totalStudentCount) * 100 : 100;
-
-  // 4. Student Feedback Rating
-  const feedbackRecords = await db.query.feedback.findMany({
-    where: and(
-      eq(feedback.teacherId, teacherId),
-      sql`TO_CHAR(${feedback.createdAt}, 'YYYY-MM') = ${month}`
-    ),
-  });
-  const avgFeedbackRating = feedbackRecords.length > 0
-    ? feedbackRecords.reduce((sum, f) => sum + f.rating, 0) / feedbackRecords.length
-    : 5.0; // Default to 5 if no feedback
-
-  // 5. Composite Score
-  const score = (teacherAttendancePct * 0.4) + (studentAttendancePct * 0.3) + ((avgFeedbackRating / 5) * 100 * 0.3);
-
-  // 6. Incentives
-  return score >= 90 ? 2000 : score >= 80 ? 1000 : 0;
-}
-
 export async function recalculateSalaryInternal(
   db: ReturnType<typeof getDb>,
   teacherId: number,
@@ -588,8 +463,8 @@ export async function recalculateSalaryInternal(
     )
   });
 
-  const incentive = await calculateIncentiveForTeacherMonth(db, teacherId, month);
-  const totalAmount = netSalary + incentive;
+  // SRS 13: pay is the sum of per-class rates (+ demo pay); there is no incentive bonus.
+  const totalAmount = netSalary;
 
   const salaryValues = {
     teacherId,
@@ -913,17 +788,11 @@ export async function fetchFullTeacherReportData(db: ReturnType<typeof getDb>, u
     }
   }
 
-  const feedbackList = await db.query.feedback.findMany({
-    where: eq(feedback.teacherId, userId),
-  });
-  const avgFeedbackRating = feedbackList.length > 0
-    ? Math.round((feedbackList.reduce((sum, f) => sum + f.rating, 0) / feedbackList.length) * 10) / 10
-    : 5.0;
-
+  // Teacher score = attendance only (student feedback ratings were removed; not part of the SRS)
+  const avgFeedbackRating = 0;
   const performanceScore = Math.round(
-    (teacherAttendancePercentage * 0.4) +
-    (avgStudentAttendancePct * 0.3) +
-    ((avgFeedbackRating / 5) * 100 * 0.3)
+    (teacherAttendancePercentage * 0.6) +
+    (avgStudentAttendancePct * 0.4)
   );
 
   const enrolledStudentIds = new Set<number>();
@@ -2222,144 +2091,6 @@ export const adminRouter = createRouter({
 
   // ─── Feedback ────────────────────────────────────────────────────────────────
 
-  listFeedback: adminQuery
-    .input(z.object({
-      teacherId: z.number().optional(),
-      batchId: z.number().optional(),
-      courseName: z.string().optional(),
-      startDate: z.date().optional(),
-      endDate: z.date().optional(),
-    }).optional())
-    .query(async ({ input }) => {
-      const db = getDb();
-      
-      let batchIdsWithCourse: number[] | undefined = undefined;
-      if (input?.courseName) {
-        const matchingBatches = await db
-          .select({ id: batches.id })
-          .from(batches)
-          .innerJoin(modules, eq(batches.moduleId, modules.id))
-          .where(ilike(modules.name, `%${input.courseName}%`));
-        batchIdsWithCourse = matchingBatches.map(b => b.id);
-        if (batchIdsWithCourse.length === 0) {
-          return [];
-        }
-      }
-      
-      const whereConditions = [];
-      if (input?.teacherId) whereConditions.push(eq(feedback.teacherId, input.teacherId));
-      if (input?.batchId) whereConditions.push(eq(feedback.batchId, input.batchId));
-      if (batchIdsWithCourse) whereConditions.push(inArray(feedback.batchId, batchIdsWithCourse));
-      if (input?.startDate) whereConditions.push(gte(feedback.createdAt, input.startDate));
-      if (input?.endDate) whereConditions.push(lte(feedback.createdAt, input.endDate));
-      
-      const where = whereConditions.length > 0 ? and(...whereConditions) : undefined;
-      
-      return db.query.feedback.findMany({
-        where,
-        orderBy: desc(feedback.createdAt),
-        with: {
-          student: true,
-          teacher: true,
-          batch: {
-            with: {
-              module: true
-            }
-          },
-          class: true,
-        },
-      });
-    }),
-
-  getFeedbackStats: adminQuery
-    .input(z.object({
-      teacherId: z.number().optional(),
-      batchId: z.number().optional(),
-      courseName: z.string().optional(),
-      startDate: z.date().optional(),
-      endDate: z.date().optional(),
-    }).optional())
-    .query(async ({ input }) => {
-      const db = getDb();
-      
-      let batchIdsWithCourse: number[] | undefined = undefined;
-      if (input?.courseName) {
-        const matchingBatches = await db
-          .select({ id: batches.id })
-          .from(batches)
-          .innerJoin(modules, eq(batches.moduleId, modules.id))
-          .where(ilike(modules.name, `%${input.courseName}%`));
-        batchIdsWithCourse = matchingBatches.map(b => b.id);
-        if (batchIdsWithCourse.length === 0) {
-          return {
-            averageRating: 0,
-            totalCount: 0,
-            distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-            recentComments: [],
-          };
-        }
-      }
-      
-      const whereConditions = [];
-      if (input?.teacherId) whereConditions.push(eq(feedback.teacherId, input.teacherId));
-      if (input?.batchId) whereConditions.push(eq(feedback.batchId, input.batchId));
-      if (batchIdsWithCourse) whereConditions.push(inArray(feedback.batchId, batchIdsWithCourse));
-      if (input?.startDate) whereConditions.push(gte(feedback.createdAt, input.startDate));
-      if (input?.endDate) whereConditions.push(lte(feedback.createdAt, input.endDate));
-      
-      const where = whereConditions.length > 0 ? and(...whereConditions) : undefined;
-      
-      const feedbacks = await db.query.feedback.findMany({
-        where,
-        orderBy: desc(feedback.createdAt),
-        with: {
-          student: true,
-          teacher: true,
-          batch: true,
-        }
-      });
-      
-      const totalCount = feedbacks.length;
-      if (totalCount === 0) {
-        return {
-          averageRating: 0,
-          totalCount: 0,
-          distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-          recentComments: [],
-        };
-      }
-      
-      const sum = feedbacks.reduce((acc, f) => acc + f.rating, 0);
-      const averageRating = Math.round((sum / totalCount) * 100) / 100;
-      
-      const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-      for (const f of feedbacks) {
-        const rating = f.rating as 1 | 2 | 3 | 4 | 5;
-        if (distribution[rating] !== undefined) {
-          distribution[rating]++;
-        }
-      }
-      
-      const recentComments = feedbacks
-        .filter((f) => f.comment && f.comment.trim() !== "")
-        .map((f) => ({
-          studentName: f.student.name,
-          teacherName: f.teacher.name,
-          rating: f.rating,
-          comment: f.comment,
-          createdAt: f.createdAt,
-          batchName: f.batch?.name || "N/A",
-        }))
-        .slice(0, 10);
-        
-      return {
-        averageRating,
-        totalCount,
-        distribution,
-        recentComments,
-      };
-    }),
-
   getFeedbackSettings: adminQuery.query(async () => {
     const db = getDb();
     const settingsList = await db.query.systemSettings.findMany();
@@ -2370,7 +2101,6 @@ export const adminRouter = createRouter({
       feedback_limit_per_batch: settingsMap.has("feedback_limit_per_batch")
         ? settingsMap.get("feedback_limit_per_batch") === "true"
         : true,
-      feedback_teacher_stats_enabled: settingsMap.get("feedback_teacher_stats_enabled") === "true",
     };
   }),
 
@@ -2378,7 +2108,6 @@ export const adminRouter = createRouter({
     .input(z.object({
       feedback_edit_period_minutes: z.number().nonnegative(),
       feedback_limit_per_batch: z.boolean(),
-      feedback_teacher_stats_enabled: z.boolean(),
     }))
     .mutation(async ({ input, ctx }) => {
       if (!["super_admin", "admin"].includes(ctx.user.role)) {
@@ -2404,7 +2133,6 @@ export const adminRouter = createRouter({
       
       await upsertSetting("feedback_edit_period_minutes", String(input.feedback_edit_period_minutes));
       await upsertSetting("feedback_limit_per_batch", String(input.feedback_limit_per_batch));
-      await upsertSetting("feedback_teacher_stats_enabled", String(input.feedback_teacher_stats_enabled));
       
       return { success: true };
     }),
@@ -2543,73 +2271,6 @@ export const adminRouter = createRouter({
       return { success: true };
     }),
 
-  getTeacherAggregatedStats: teacherQuery
-    .input(z.object({
-      teacherId: z.number().optional(),
-    }).optional())
-    .query(async ({ input, ctx }) => {
-      const db = getDb();
-      
-      let targetTeacherId = ctx.user.id;
-      
-      const isPrivileged = ["super_admin", "admin", "academic_head"].includes(ctx.user.role);
-      if (input?.teacherId && isPrivileged) {
-        targetTeacherId = input.teacherId;
-      }
-      
-      if (ctx.user.role === "teacher" && targetTeacherId !== ctx.user.id) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You can only view your own statistics.",
-        });
-      }
-      
-      if (ctx.user.role === "teacher") {
-        const statsEnabledRow = await db.query.systemSettings.findFirst({
-          where: eq(systemSettings.key, "feedback_teacher_stats_enabled"),
-        });
-        const statsEnabled = statsEnabledRow ? statsEnabledRow.value === "true" : false;
-        if (!statsEnabled) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Feedback statistics view is currently disabled by the Super Admin.",
-          });
-        }
-      }
-      
-      const feedbacks = await db.query.feedback.findMany({
-        where: eq(feedback.teacherId, targetTeacherId),
-      });
-      
-      const totalCount = feedbacks.length;
-      if (totalCount === 0) {
-        return {
-          averageRating: 0,
-          totalCount: 0,
-          distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-        };
-      }
-      
-      const sum = feedbacks.reduce((acc, f) => acc + f.rating, 0);
-      const averageRating = Math.round((sum / totalCount) * 100) / 100;
-      
-      const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-      for (const f of feedbacks) {
-        const rating = f.rating as 1 | 2 | 3 | 4 | 5;
-        if (distribution[rating] !== undefined) {
-          distribution[rating]++;
-        }
-      }
-      
-      return {
-        averageRating,
-        totalCount,
-        distribution,
-      };
-    }),
-
-  // ─── Notifications ───────────────────────────────────────────────────────────
-
   listNotifications: strictAdminQuery
     .input(z.object({ userId: z.number().optional() }).optional())
     .query(async ({ input }) => {
@@ -2637,80 +2298,6 @@ export const adminRouter = createRouter({
     }),
 
   // ─── Violations / Discipline ─────────────────────────────────────────────────
-
-  listViolations: adminQuery.query(async ({ ctx }) => {
-    const db = getDb();
-    
-    let violationConds = [];
-    if (ctx.user.role === "academic_head") {
-      const dept = await db.query.departments.findFirst({
-        where: eq(departments.headUserId, ctx.user.id),
-        with: { departmentTeachers: true }
-      });
-      if (!dept || dept.departmentTeachers.length === 0) {
-        return [];
-      }
-      const teacherIds = dept.departmentTeachers.map((dt: any) => dt.teacherId);
-      
-      const studentIdsFromBatches = await db.select({ studentId: batchEnrollments.studentId })
-        .from(batchEnrollments)
-        .innerJoin(batches, eq(batches.id, batchEnrollments.batchId))
-        .where(inArray(batches.teacherId, teacherIds));
-      const studentIdsFromOto = await db.select({ studentId: studentClassAllocations.studentId })
-        .from(studentClassAllocations)
-        .where(or(inArray(sql`CAST(${studentClassAllocations.allocation}->\'oneToOne\'->>\'teacherId\' AS INTEGER)`, teacherIds), inArray(sql`CAST(${studentClassAllocations.allocation}->\'group\'->>\'teacherId\' AS INTEGER)`, teacherIds)));
-        
-      const allStudentIds = [...new Set([...studentIdsFromBatches.map(s => s.studentId), ...studentIdsFromOto.map(s => s.studentId)])];
-      const allDepartmentUserIds = [...teacherIds, ...allStudentIds];
-      
-      if (allDepartmentUserIds.length === 0) {
-        return [];
-      }
-      violationConds.push(inArray(violations.userId, allDepartmentUserIds));
-    }
-    
-    return db.query.violations.findMany({
-      where: violationConds.length > 0 ? and(...violationConds) : undefined,
-      orderBy: desc(violations.createdAt),
-      with: { user: true, reporter: true },
-    });
-  }),
-
-  // Task 14.1 — notify subject user after violation creation
-  createViolation: adminQuery
-    .input(z.object({
-      userId: z.number(),
-      type: z.string(),
-      description: z.string(),
-      action: z.string().optional(),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const db = getDb();
-      await db.insert(violations).values({
-        ...input,
-        reportedBy: ctx.user.id,
-      });
-
-      await sendNotification(
-        input.userId,
-        "Violation Recorded",
-        `A ${input.type} violation has been recorded against your account. ${input.description}`,
-        "violation_created",
-      );
-
-      return { success: true };
-    }),
-
-  // Task 14.2 — resolve violation
-  resolveViolation: adminQuery
-    .input(z.object({ violationId: z.number() }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      await db.update(violations)
-        .set({ status: "resolved", resolvedAt: new Date() })
-        .where(eq(violations.id, input.violationId));
-      return { success: true };
-    }),
 
   // Task 14.3 — suspend user
   suspendUser: strictAdminQuery
@@ -3526,66 +3113,6 @@ export const adminRouter = createRouter({
         message: "Use this structured data for client-side report generation.",
         data: reportData,
       };
-    }),
-
-  getClassChatReport: adminQuery
-    .input(z.object({ classId: z.number() }))
-    .query(async ({ input }) => {
-      const db = getDb();
-      const cls = await db.query.classes.findFirst({ where: eq(classes.id, input.classId) });
-      if (!cls) return [];
-
-      const filters = [eq(messages.batchId, cls.batchId)];
-      if (cls.startedAt) filters.push(sql`${messages.createdAt} >= ${cls.startedAt}`);
-      if (cls.endedAt) filters.push(sql`${messages.createdAt} <= ${cls.endedAt}`);
-
-      const rows = await db
-        .select({
-          studentId: messages.senderId,
-          studentName: users.name,
-          messageCount: sql<number>`count(*)`,
-        })
-        .from(messages)
-        .innerJoin(users, eq(messages.senderId, users.id))
-        .where(and(...filters))
-        .groupBy(messages.senderId, users.name);
-
-      return rows.map((r) => ({
-        studentId: r.studentId,
-        studentName: r.studentName,
-        messageCount: Number(r.messageCount),
-      }));
-    }),
-
-  getTeacherChatReport: adminQuery
-    .input(z.object({ teacherId: z.number() }))
-    .query(async ({ input }) => {
-      const db = getDb();
-      const teacherClasses = await db.query.classes.findMany({
-        where: eq(classes.teacherId, input.teacherId),
-      });
-
-      const result = [];
-      for (const cls of teacherClasses) {
-        const filters = [
-          eq(messages.batchId, cls.batchId),
-          eq(messages.senderId, input.teacherId),
-        ];
-        if (cls.startedAt) filters.push(sql`${messages.createdAt} >= ${cls.startedAt}`);
-        if (cls.endedAt) filters.push(sql`${messages.createdAt} <= ${cls.endedAt}`);
-
-        const rows = await db
-          .select({ messageCount: sql<number>`count(*)` })
-          .from(messages)
-          .where(and(...filters));
-
-        result.push({
-          classId: cls.id,
-          classTitle: cls.title,
-          messageCount: Number(rows[0]?.messageCount ?? 0),
-        });
-      }
-      return result;
     }),
 
   adjustStudentSessions: adminQuery

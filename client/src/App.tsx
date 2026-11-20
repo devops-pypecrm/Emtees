@@ -7,20 +7,13 @@ import ForceChangePassword from "@/components/ForceChangePassword";
 // Import pages
 import Dashboard from "./lms-pages/Dashboard";
 import Batches from "./lms-pages/Batches";
-import Chat from "./lms-pages/Chat";
-import Community from "./lms-pages/Community";
-import PrivateChat from "./lms-pages/PrivateChat";
 import Classes from "./lms-pages/Classes";
-import Learning from "./lms-pages/Learning";
 import Fees from "./lms-pages/Fees";
 import Salaries from "./lms-pages/Salaries";
-import Feedback from "./lms-pages/Feedback";
-import Performance from "./lms-pages/Performance";
 import Requests from "./lms-pages/Requests";
 import Reports from "./lms-pages/Reports";
 import TeacherReports from "./lms-pages/TeacherReports";
 import Notifications from "./lms-pages/Notifications";
-import Discipline from "./lms-pages/Discipline";
 import Settings from "./lms-pages/Settings";
 import Students from "./lms-pages/Students";
 import Users from "./lms-pages/Users";
@@ -32,9 +25,7 @@ import SalesExecutiveStudents from "./lms-pages/SalesExecutiveStudents";
 import SalesExecutives from "./lms-pages/SalesExecutives";
 import SalesRegistrations from "./lms-pages/SalesRegistrations";
 import SalesReports from "./lms-pages/SalesReports";
-import SalesLeads from "./lms-pages/SalesLeads";
 import SalesDashboard from "./lms-pages/SalesDashboard";
-import SalesPerformanceDetail from "./lms-pages/SalesPerformanceDetail";
 import Departments from "./lms-pages/Departments";
 import SalesDemoClasses from "./lms-pages/SalesDemoClasses";
 import AcademicHeadPortal from "./lms-pages/AcademicHeadPortal";
@@ -108,25 +99,18 @@ export default function App() {
         <Route path="/" element={<ProtectedLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="batches" element={<Batches />} />
-          <Route path="chat" element={<Chat />} />
-          <Route path="community" element={<Community />} />
-          <Route path="messages" element={<PrivateChat />} />
           <Route path="classes">
             <Route index element={<Navigate to="/classes/group" replace />} />
             <Route path="group" element={<Classes type="group" />} />
             <Route path="one-to-one" element={<Classes type="one-to-one" />} />
             <Route path="demo" element={<Classes type="demo" />} />
           </Route>
-          <Route path="learning" element={<Learning />} />
           <Route path="fees" element={<Fees />} />
           <Route path="salaries" element={<Salaries />} />
-          <Route path="feedback" element={<Feedback />} />
-          <Route path="performance" element={<Performance />} />
           <Route path="requests" element={<Requests />} />
           <Route path="reports" element={<Reports />} />
           <Route path="teacher-reports" element={<TeacherReports />} />
           <Route path="notifications" element={<Notifications />} />
-          <Route path="discipline" element={<Discipline />} />
           <Route path="settings" element={<Settings />} />
           <Route path="students" element={<Students />} />
           <Route path="users" element={<Users />} />
@@ -140,8 +124,6 @@ export default function App() {
             <Route path="executives" element={<SalesExecutives />} />
             <Route path="registrations" element={<SalesRegistrations />} />
             <Route path="reports" element={<SalesReports />} />
-            <Route path="performance/:userId" element={<SalesPerformanceDetail />} />
-            <Route path="leads" element={<SalesLeads />} />
           </Route>
         </Route>
         

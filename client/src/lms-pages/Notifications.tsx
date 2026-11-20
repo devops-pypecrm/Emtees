@@ -150,46 +150,6 @@ export default function NotificationsPage() {
     onError: (err) => toast.error(err.message),
   });
 
-  const dismissAnnouncement = trpc.notification.dismissAnnouncement.useMutation({
-    onSuccess: () => {
-      refetch();
-      toast.success("Announcement dismissed");
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const createAnnouncement = trpc.notification.createAnnouncement.useMutation({
-    onSuccess: () => {
-      toast.success("Announcement published successfully");
-      setBroadcastOpen(false);
-      setForm({
-        title: "",
-        description: "",
-        audienceType: "all",
-        audienceId: undefined,
-        expiresAt: "",
-      });
-      refetch();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const handleCreateBroadcast = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.title.trim() || !form.description.trim()) {
-      toast.error("Please fill in both title and description.");
-      return;
-    }
-
-    createAnnouncement.mutate({
-      title: form.title,
-      description: form.description,
-      audienceType: form.audienceType,
-      audienceId: form.audienceId,
-      expiresAt: form.expiresAt ? form.expiresAt : undefined,
-    });
-  };
-
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "announcement":
@@ -240,7 +200,7 @@ export default function NotificationsPage() {
             )}
           </div>
           <p className="text-xs text-gray-500">
-            Keep track of class schedules, private messages, announcements, and tasks.
+            Keep track of class schedules, requests and payments.
           </p>
         </div>
         
@@ -258,156 +218,6 @@ export default function NotificationsPage() {
             </Button>
           )}
 
-          {isAdmin && (
-            <Dialog open={broadcastOpen} onOpenChange={setBroadcastOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-sm">
-                  <Plus className="w-4 h-4 mr-1.5" />
-                  New Broadcast
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md bg-white dark:bg-slate-950 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800">
-                <DialogHeader>
-                  <DialogTitle className="text-lg font-bold text-gray-800 dark:text-gray-100">
-                    Publish Admin Broadcast
-                  </DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleCreateBroadcast} className="space-y-4 mt-2">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                      Broadcast Title <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      placeholder="e.g. Schedule Update or Maintenance notice"
-                      value={form.title}
-                      onChange={(e) => setForm({ ...form, title: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                      Announcement Details <span className="text-red-500">*</span>
-                    </label>
-                    <Textarea
-                      placeholder="Describe the notice in detail for targeted users..."
-                      value={form.description}
-                      onChange={(e) => setForm({ ...form, description: e.target.value })}
-                      className="min-h-24"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        Target Audience
-                      </label>
-                      <Select
-                        value={form.audienceType}
-                        onValueChange={(val: any) =>
-                          setForm({ ...form, audienceType: val, audienceId: undefined })
-                        }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select target" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Users</SelectItem>
-                          <SelectItem value="students">Students Only</SelectItem>
-                          <SelectItem value="teachers">Teachers Only</SelectItem>
-                          <SelectItem value="batch">Specific Batch</SelectItem>
-                          <SelectItem value="course">Specific Course</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        Expiry Date <span className="text-gray-400 font-normal">(optional)</span>
-                      </label>
-                      <Input
-                        type="datetime-local"
-                        value={form.expiresAt}
-                        onChange={(e) => setForm({ ...form, expiresAt: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  {form.audienceType === "batch" && (
-                    <div className="space-y-1.5 animate-in fade-in duration-200">
-                      <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        Target Batch
-                      </label>
-                      <Select
-                        value={form.audienceId?.toString() || ""}
-                        onValueChange={(val) => setForm({ ...form, audienceId: Number(val) })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a Batch" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60 overflow-y-auto">
-                          {batchesList?.map((b) => (
-                            <SelectItem key={b.id} value={b.id.toString()}>
-                              {b.name} ({b.module?.name})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {form.audienceType === "course" && (
-                    <div className="space-y-1.5 animate-in fade-in duration-200">
-                      <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        Target Course
-                      </label>
-                      <Select
-                        value={form.audienceId?.toString() || ""}
-                        onValueChange={(val) => setForm({ ...form, audienceId: Number(val) })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a Course" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60 overflow-y-auto">
-                          {modulesList?.map((m) => (
-                            <SelectItem key={m.id} value={m.id.toString()}>
-                              {m.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 pt-2 border-t mt-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-1/2"
-                      onClick={() => setBroadcastOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      disabled={createAnnouncement.isPending}
-                    >
-                      {createAnnouncement.isPending ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                          Publishing...
-                        </>
-                      ) : (
-                        "Publish Broadcast"
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
-          )}
         </div>
       </div>
 
@@ -531,20 +341,6 @@ export default function NotificationsPage() {
                               </Button>
                             </Link>
                           )}
-                          {n.type === "private_message" && (
-                            <Link to="/messages" onClick={(e) => {
-                              e.stopPropagation();
-                              markRead.mutate({ id: n.id as number });
-                            }}>
-                              <Button
-                                size="sm"
-                                className="bg-sky-600 hover:bg-sky-700 text-white text-xs px-3 py-1 rounded-md"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5 mr-1" />
-                                Open Chat
-                              </Button>
-                            </Link>
-                          )}
                           {n.type === "payment" && (
                             <Link to="/fees" onClick={(e) => {
                               e.stopPropagation();
@@ -582,23 +378,7 @@ export default function NotificationsPage() {
                         </Button>
                       )}
 
-                      {/* Dismiss Announcement */}
-                      {isAnnouncement && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            dismissAnnouncement.mutate({ announcementId: (n as any).realId });
-                          }}
-                          disabled={dismissAnnouncement.isPending}
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-amber-600 hover:bg-amber-50/50"
-                          title="Dismiss"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      )}
-
+                
                       {/* Delete button (for personal notifications) */}
                       {!isAnnouncement && (
                         <Button

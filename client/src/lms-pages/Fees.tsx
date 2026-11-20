@@ -94,8 +94,6 @@ export default function FeesPage() {
     { enabled: false }
   );
 
-  const createOrder = trpc.student.createRazorpayOrder.useMutation();
-  const verifyPayment = trpc.student.verifyRazorpayPayment.useMutation();
 
   // Dialog & Form States
   const [form, setForm] = useState({ studentId: 0, amount: 0, type: "tuition", dueDate: "" });
@@ -173,99 +171,7 @@ export default function FeesPage() {
     }
   };
 
-  const loadRazorpayScript = () => {
-    return new Promise((resolve) => {
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
 
-  const handlePayment = async (amount: number) => {
-    try {
-      if (amount <= 0) {
-        toast.error("Invalid payment amount.");
-        return;
-      }
-      const order = await createOrder.mutateAsync({ amount, paymentId: activePayPaymentId || undefined });
-      if (order.keyId.includes("mock") || order.keyId === "") {
-        setSimulatorOrderData({ orderId: order.orderId, amount: order.amount });
-        setOpenSimulator(true);
-        return;
-      }
-      const loaded = await loadRazorpayScript();
-      if (!loaded) {
-        toast.error("Failed to load Razorpay SDK. Showing simulator instead.");
-        setSimulatorOrderData({ orderId: order.orderId, amount: order.amount });
-        setOpenSimulator(true);
-        return;
-      }
-      const options = {
-        key: order.keyId,
-        amount: order.amount,
-        currency: order.currency,
-        name: "Emtees Academy",
-        description: "Course Fee Payment",
-        order_id: order.orderId,
-        handler: async function (response: any) {
-          try {
-            const result = await verifyPayment.mutateAsync({
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-              amount: order.amount / 100,
-              paymentId: activePayPaymentId || undefined,
-            });
-            toast.success("Payment successful!");
-            setReceiptData(result.payment);
-            setShowReceipt(true);
-            setActivePayPaymentId(null);
-            myProfile.refetch();
-            if (myPayments.isSuccess) myPayments.refetch();
-          } catch (err: any) {
-            toast.error(err.message || "Payment verification failed");
-          }
-        },
-        prefill: {
-          name: user?.name,
-          email: myProfile.data?.email || "",
-          contact: user?.phone || "",
-        },
-        theme: {
-          color: "#059669",
-        },
-      };
-      const rzp = new (window as any).Razorpay(options);
-      rzp.open();
-    } catch (err: any) {
-      toast.error(err.message || "Order creation failed");
-    }
-  };
-
-  const handleSimulateSuccess = async () => {
-    if (!simulatorOrderData) return;
-    try {
-      const mockPaymentId = `pay_mock_${Math.random().toString(36).substring(2, 15)}`;
-      const result = await verifyPayment.mutateAsync({
-        razorpay_payment_id: mockPaymentId,
-        razorpay_order_id: simulatorOrderData.orderId,
-        razorpay_signature: "mock_signature",
-        amount: simulatorOrderData.amount / 100,
-        paymentId: activePayPaymentId || undefined,
-      });
-      toast.success("Mock Payment successful!");
-      setOpenSimulator(false);
-      setReceiptData(result.payment);
-      setShowReceipt(true);
-      setActivePayPaymentId(null);
-      myProfile.refetch();
-      if (myPayments.isSuccess) myPayments.refetch();
-    } catch (err: any) {
-      toast.error(err.message || "Simulated payment verification failed");
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -341,27 +247,6 @@ export default function FeesPage() {
                   <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ml-2">Full Payment</Badge>
                 )}
               </CardTitle>
-              {balance > 0 && (
-                <Button
-                  onClick={() => {
-                    const tuitionPayments = myPayments.data?.filter(p => p.type === "tuition" && p.status !== "paid") || [];
-                    const sortedInst = [...tuitionPayments].sort((a, b) => (a.installmentNumber || 999) - (b.installmentNumber || 999));
-                    const nextInst = sortedInst[0];
-                    if (nextInst && nextInst.installmentNumber !== null) {
-                      setActivePayPaymentId(nextInst.id);
-                      setPayAmount(parseFloat(nextInst.amount));
-                    } else {
-                      setActivePayPaymentId(null);
-                      const initialPay = isFirstPayment ? Math.min(minInitial, balance) : balance;
-                      setPayAmount(initialPay);
-                    }
-                    setPayOpen(true);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2 px-4 rounded-lg shadow-sm flex items-center gap-1.5"
-                >
-                  <CreditCard className="w-4 h-4" /> Pay Outstanding Balance
-                </Button>
-              )}
             </CardHeader>
             <CardContent className="pt-6">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
@@ -443,19 +328,6 @@ export default function FeesPage() {
                           <TableCell>{getStatusBadge(inst.status)}</TableCell>
                           <TableCell>{inst.paidDate ? new Date(inst.paidDate).toLocaleDateString() : (inst.paidAt ? new Date(inst.paidAt).toLocaleDateString() : "-")}</TableCell>
                           <TableCell className="text-right py-2">
-                            {inst.status !== "paid" && (
-                              <Button
-                                size="sm"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-1 px-3 rounded-lg h-7"
-                                onClick={() => {
-                                  setActivePayPaymentId(inst.id);
-                                  setPayAmount(parseFloat(inst.amount));
-                                  setPayOpen(true);
-                                }}
-                              >
-                                Pay Now
-                              </Button>
-                            )}
                           </TableCell>
                         </TableRow>
                       ));
@@ -820,145 +692,6 @@ export default function FeesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Student Payment Dialog */}
-      <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent className="w-[95vw] md:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold text-gray-800 dark:text-gray-200">Make Course Fee Payment</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="bg-gray-50 dark:bg-slate-800/50 p-4 rounded-xl space-y-2 border">
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>Total Fees:</span>
-                <span className="font-semibold text-gray-800 dark:text-gray-200">₹{myProfile.data?.profile?.feesTotal}</span>
-              </div>
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>Already Paid:</span>
-                <span className="font-semibold text-emerald-600">₹{myProfile.data?.profile?.feesPaid}</span>
-              </div>
-              <div className="flex justify-between text-xs text-gray-500 border-t pt-2 mt-2">
-                <span>Outstanding Balance:</span>
-                <span className="font-bold text-red-600">₹{balance}</span>
-              </div>
-              {isFirstPayment && (
-                <div className="flex justify-between text-xs text-amber-600 font-medium">
-                  <span>Minimum Initial Payment:</span>
-                  <span>₹{minInitial}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-600 dark:text-gray-400">Payment Amount (₹)</label>
-              <Input
-                type="number"
-                placeholder="Enter amount"
-                value={payAmount || ""}
-                onChange={(e) => setPayAmount(Number(e.target.value))}
-                max={balance}
-                min={minRequiredAmount || 1}
-              />
-              {isFirstPayment && payAmount < minRequiredAmount && (
-                <p className="text-[11px] text-red-500 font-medium mt-1">
-                  ⚠ First payment must be at least the minimum initial payment of ₹{minRequiredAmount}.
-                </p>
-              )}
-              {payAmount > balance && (
-                <p className="text-[11px] text-red-500 font-medium mt-1">
-                  ⚠ Amount cannot exceed the outstanding balance of ₹{balance}.
-                </p>
-              )}
-            </div>
-
-            <Button
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold mt-2"
-              onClick={() => {
-                if (!isAmountValid) return;
-                setPayOpen(false);
-                handlePayment(payAmount);
-              }}
-              disabled={!isAmountValid}
-            >
-              Proceed to Pay ₹{payAmount || 0}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Receipt Modal */}
-      <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="w-[95vw] md:max-w-md max-h-[90vh] overflow-y-auto bg-white border border-gray-100 shadow-xl rounded-xl p-0 overflow-hidden">
-          <div className="p-6 space-y-6 print:p-0 print:m-0" id="payment-receipt">
-            <div className="text-center space-y-2 border-b pb-4">
-              <h2 className="text-2xl font-extrabold text-emerald-600 tracking-tight">EMTEES ACADEMY</h2>
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Official Payment Receipt</p>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Receipt ID:</span>
-                <span className="font-mono font-semibold text-gray-800">REC-{receiptData?.id || "N/A"}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Transaction ID:</span>
-                <span className="font-mono font-semibold text-gray-800 text-xs">{receiptData?.transactionId || "N/A"}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Date:</span>
-                <span className="font-semibold text-gray-800">
-                  {receiptData?.paidAt ? new Date(receiptData.paidAt).toLocaleString() : new Date().toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Student Name:</span>
-                <span className="font-semibold text-gray-800">{receiptData?.student?.name || user?.name}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Course/Batch:</span>
-                <span className="font-semibold text-gray-800">{receiptData?.courseName || "Course"}</span>
-              </div>
-              <div className="flex justify-between text-sm border-t pt-4">
-                <span className="text-gray-500">Amount Paid:</span>
-                <span className="font-bold text-emerald-600 text-lg">₹{receiptData?.amount || 0}</span>
-              </div>
-            </div>
-          </div>
-          <div className="bg-gray-50 px-6 py-4 flex gap-3 justify-end border-t print:hidden">
-            <Button variant="outline" size="sm" onClick={() => setShowReceipt(false)}>Close</Button>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => window.print()}>
-              <Printer className="w-4 h-4 mr-2" /> Print Receipt
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Razorpay Payment Simulator Dialog */}
-      <Dialog open={openSimulator} onOpenChange={setOpenSimulator}>
-        <DialogContent className="w-[95vw] md:max-w-md max-h-[90vh] overflow-y-auto bg-white border border-yellow-100 shadow-xl rounded-xl p-6">
-          <DialogHeader>
-            <DialogTitle className="text-amber-800 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-500" />
-              Razorpay Payment Simulator
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 my-4 text-center">
-            <p className="text-sm text-gray-600">
-              The application is running in development mode or with mock API credentials. You can simulate the checkout flow below.
-            </p>
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-5 rounded-xl border border-emerald-100 dark:border-emerald-900">
-              <p className="text-xs text-emerald-800 dark:text-emerald-400 uppercase tracking-wider font-semibold">Simulating Order ID</p>
-              <p className="text-base font-mono font-bold text-gray-800 dark:text-gray-200 mt-1">{simulatorOrderData?.orderId}</p>
-              <p className="text-xs text-gray-400 mt-2">Amount: <span className="font-bold text-gray-700 dark:text-gray-300">₹{(simulatorOrderData?.amount ?? 0) / 100}</span></p>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button variant="outline" className="flex-1 text-xs" onClick={() => setOpenSimulator(false)}>Cancel</Button>
-              <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs" onClick={handleSimulateSuccess}>
-                Simulate Success
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

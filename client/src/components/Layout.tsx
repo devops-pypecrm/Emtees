@@ -44,51 +44,35 @@ const navItems = [
   { icon: GraduationCap, label: "Qualifications", path: "/qualifications" },
   { icon: Users, label: "Admission Manager", path: "/sales-management/executives" },
   { icon: BarChart3, label: "Sales & Accounts", path: "/sales-management/dashboard" },
-  { icon: Contact, label: "Leads", path: "/sales-management/leads" },
   { icon: Building2, label: "Departments", path: "/departments" },
   { icon: GraduationCap, label: "Academic Portal", path: "/academic-portal" },
   { icon: BookOpen, label: "Batches", path: "/batches" },
-  { icon: MessageCircle, label: "Chat", path: "/chat" },
-  { icon: Globe, label: "Community", path: "/community" },
-  { icon: MessageSquare, label: "Private Messages", path: "/messages" },
   { icon: Calendar, label: "Group Sessions", path: "/classes/group" },
   { icon: Clock, label: "1 on 1 Sessions", path: "/classes/one-to-one" },
   { icon: Video, label: "Demo Classes", path: "/classes/demo" },
-  { icon: GraduationCap, label: "Learning", path: "/learning" },
   { icon: CreditCard, label: "Fees", path: "/fees" },
   { icon: Coins, label: "Salaries", path: "/salaries" },
-  { icon: Star, label: "Feedback", path: "/feedback" },
-  { icon: Award, label: "Performance", path: "/performance" },
   { icon: GitPullRequest, label: "Requests", path: "/requests" },
   { icon: BarChart3, label: "Reports", path: "/reports" },
   { icon: BarChart3, label: "Teacher Reports", path: "/teacher-reports" },
   { icon: Bell, label: "Notifications", path: "/notifications" },
-  { icon: Shield, label: "Discipline", path: "/discipline" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 const studentNav = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: BookOpen, label: "Batches", path: "/batches" },
-  { icon: MessageCircle, label: "Chat", path: "/chat" },
-  { icon: Globe, label: "Community", path: "/community" },
-  { icon: MessageSquare, label: "Private Messages", path: "/messages" },
   { icon: Calendar, label: "Group Sessions", path: "/classes/group" },
   { icon: Clock, label: "1 on 1 Sessions", path: "/classes/one-to-one" },
-  { icon: GraduationCap, label: "Learning", path: "/learning" },
   { icon: CreditCard, label: "Fees", path: "/fees" },
-  { icon: Star, label: "Feedback", path: "/feedback" },
-  { icon: Award, label: "Performance", path: "/performance" },
   { icon: GitPullRequest, label: "Requests", path: "/requests" },
   { icon: BarChart3, label: "Progress", path: "/reports" },
   { icon: Bell, label: "Alerts", path: "/notifications" },
-  { icon: Shield, label: "Discipline", path: "/discipline" },
 ];
 
 const salesNav = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: BarChart3, label: "Sales & Accounts", path: "/sales-management/dashboard" },
-  { icon: Contact, label: "Leads", path: "/sales-management/leads" },
   { icon: Contact, label: "My Students", path: "/sales-executive/students" },
   { icon: Video, label: "Demo Classes", path: "/sales-executive/demo-classes" },
   { icon: GitPullRequest, label: "Enrollments", path: "/sales-management/registrations" },
@@ -119,10 +103,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Show a toast whenever any class starts in a batch the user is in
   useClassStartedAlert();
 
-  const conversationsQuery = trpc.privateMessage.listConversations.useQuery(undefined, {
-    enabled: !!user,
-  });
-
   const notificationsQuery = trpc.notification.list.useQuery({ limit: 100 }, {
     enabled: !!user,
   });
@@ -131,15 +111,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     enabled: !!user,
   });
 
-  const totalUnreadCount = conversationsQuery.data?.reduce((acc, c) => acc + c.unreadCount, 0) || 0;
   const unreadNotificationsCount = notificationsQuery.data?.items.filter((n) => !n.isRead).length || 0;
 
   useEffect(() => {
     if (!socket) return;
-
-    function handleNewMessage() {
-      conversationsQuery.refetch();
-    }
 
     function handleNewNotification(notification: any) {
       notificationsQuery.refetch();
@@ -164,14 +139,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       });
     }
 
-    socket.on("private_message:new", handleNewMessage);
     socket.on("notification:new", handleNewNotification);
 
     return () => {
-      socket.off("private_message:new", handleNewMessage);
       socket.off("notification:new", handleNewNotification);
     };
-  }, [socket, conversationsQuery, notificationsQuery]);
+  }, [socket, notificationsQuery]);
 
   if (!user) return null;
 
@@ -181,13 +154,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     ? [...salesNav]
     : [...navItems];
 
-  if (user.role === "student") {
-    const completionDate = myProfileQuery.data?.profile?.completionDate;
-    const hasCompleted = completionDate !== null && completionDate !== undefined;
-    if (!hasCompleted) {
-      items = items.filter((item) => item.path !== "/community");
-    }
-  }
   if (!["super_admin", "teacher"].includes(user.role)) {
     items = items.filter((item) => item.path !== "/salaries");
   }
@@ -213,10 +179,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       "/classes/group",
       "/classes/one-to-one",
       "/classes/demo",
-      "/feedback",
-      "/performance",
       "/notifications",
-      "/discipline",
       "/qualifications",
       "/reports",
       "/teacher-reports",
@@ -237,7 +200,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
         {items.map((item) => {
           const active = pathname === item.path;
-          const isMessages = item.path === "/messages";
           const isNotifications = item.path === "/notifications";
           return (
             <Link
@@ -254,11 +216,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <item.icon className="w-4 h-4 shrink-0" />
                 <span>{item.label}</span>
               </div>
-              {isMessages && totalUnreadCount > 0 && (
-                <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 min-w-5 text-center">
-                  {totalUnreadCount}
-                </span>
-              )}
               {isNotifications && unreadNotificationsCount > 0 && (
                 <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 min-w-5 text-center">
                   {unreadNotificationsCount}

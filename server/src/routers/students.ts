@@ -4,7 +4,7 @@ import { eq, desc, and, sql, count, inArray, ne, or, isNull, isNotNull, asc } fr
 import XLSX from "xlsx";
 import { createRouter, authedQuery, adminQuery, teacherQuery } from "../middleware";
 import { getDb } from "../queries/connection";
-import { users, profiles, batchEnrollments, batches, classes, modules, payments, attendance, privateMessages, feedback, sessionAllocationLogs, oneToOneSessions, studentCourseAuditLogs, studentClassAllocations, attendanceAlerts, qualifications, departments, departmentTeachers } from "@db/schema";
+import { users, profiles, batchEnrollments, batches, classes, modules, payments, attendance, sessionAllocationLogs, oneToOneSessions, studentCourseAuditLogs, studentClassAllocations, attendanceAlerts, qualifications, departments, departmentTeachers } from "@db/schema";
 import { updateStudentSessionBalances } from "../lib/sessionHelper";
 import { sendNotification, sendBulkNotification, getAdminUserIds } from "../lib/notificationEngine";
 import { getNextUniqueId } from "../lib/idGenerator";
@@ -397,38 +397,12 @@ export const studentsRouter = createRouter({
         },
       });
 
-      // 3. Fetch Feedback / Performance reports
-      const feedbackList = await db.query.feedback.findMany({
-        where: eq(feedback.studentId, userId),
-        orderBy: desc(feedback.createdAt),
-        with: {
-          teacher: true,
-        },
-      });
-
       // 4. Fetch Session Allocation Logs
       const sessionLogs = await db.query.sessionAllocationLogs.findMany({
         where: eq(sessionAllocationLogs.studentId, userId),
         orderBy: desc(sessionAllocationLogs.changedAt),
         with: {
           changedByUser: true,
-        },
-      });
-
-      // 5. Fetch Communication History (Private Messages)
-      const chatHistory = await db.query.privateMessages.findMany({
-        where: and(
-          or(
-            eq(privateMessages.senderId, userId),
-            eq(privateMessages.receiverId, userId)
-          ),
-          isNull(privateMessages.deletedAt)
-        ),
-        orderBy: desc(privateMessages.createdAt),
-        limit: 100,
-        with: {
-          sender: true,
-          receiver: true,
         },
       });
 
@@ -586,9 +560,7 @@ export const studentsRouter = createRouter({
         student: studentWithQual,
         attendance: attendanceList,
         payments: paymentsList,
-        feedback: feedbackList,
         sessionAllocationLogs: sessionLogs,
-        chatHistory,
         enrollments: resolvedEnrollments,
         classHistory: combinedHistory,
         studentCourseAuditLogs: auditLogsList,

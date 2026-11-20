@@ -6,12 +6,8 @@ import { classRouter } from "./routers/classes";
 import { adminRouter } from "./routers/admin";
 import { studentRouter } from "./routers/student";
 import { studentsRouter } from "./routers/students";
-import { privateMessageRouter } from "./routers/privateMessages";
 import { notificationRouter } from "./routers/notifications";
-import { communityRouter } from "./routers/community";
-import { disciplineRouter } from "./routers/discipline";
 import { salesExecutiveRouter } from "./routers/salesExecutive";
-import { performanceRouter } from "./routers/performance";
 import { qualificationsRouter } from "./routers/qualifications";
 import { salesRouter } from "./routers/sales";
 import { departmentRouter } from "./routers/departments";
@@ -26,13 +22,9 @@ export const appRouter = createRouter({
   admin: adminRouter,
   student: studentRouter,
   students: studentsRouter,
-  privateMessage: privateMessageRouter,
   notification: notificationRouter,
-  community: communityRouter,
-  discipline: disciplineRouter,
   salesExecutive: salesExecutiveRouter,
   sales: salesRouter,
-  performance: performanceRouter,
   qualifications: qualificationsRouter,
   department: departmentRouter,
   teacherReports: teacherReportsRouter,

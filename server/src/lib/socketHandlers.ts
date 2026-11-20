@@ -52,20 +52,8 @@ export function setupSocketHandlers(io: Server): void {
     socket.join(`user:${user.id}`);
 
     // ── batch:join ───────────────────────────────────────────────────────────
-    socket.on("batch:join", ({ batchId }: { batchId: number }) => {
-      if (typeof batchId !== "number") return;
-      const room = `batch:${batchId}`;
-      socket.join(room);
-      console.log(`[socket] user=${user.id} joined room=${room}`);
-    });
 
     // ── batch:leave ──────────────────────────────────────────────────────────
-    socket.on("batch:leave", ({ batchId }: { batchId: number }) => {
-      if (typeof batchId !== "number") return;
-      const room = `batch:${batchId}`;
-      socket.leave(room);
-      console.log(`[socket] user=${user.id} left room=${room}`);
-    });
 
     // ── class:join ───────────────────────────────────────────────────────────
     socket.on("class:join", ({ classId }: { classId: number }) => {
@@ -84,26 +72,8 @@ export function setupSocketHandlers(io: Server): void {
     });
 
     // ── typing:start ─────────────────────────────────────────────────────────
-    socket.on("typing:start", ({ batchId }: { batchId: number }) => {
-      if (typeof batchId !== "number") return;
-      socket.to(`batch:${batchId}`).emit("typing", {
-        batchId,
-        userId: user.id,
-        name: user.name,
-        isTyping: true,
-      });
-    });
 
     // ── typing:stop ──────────────────────────────────────────────────────────
-    socket.on("typing:stop", ({ batchId }: { batchId: number }) => {
-      if (typeof batchId !== "number") return;
-      socket.to(`batch:${batchId}`).emit("typing", {
-        batchId,
-        userId: user.id,
-        name: user.name,
-        isTyping: false,
-      });
-    });
 
     // ── disconnect ───────────────────────────────────────────────────────────
     socket.on("disconnect", (reason) => {
