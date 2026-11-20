@@ -758,8 +758,15 @@ export function startScheduler(): void {
     console.log("[scheduler] DISABLED by DISABLE_SCHEDULER=1");
     return;
   }
+  let lastTimetableRun = 0;
   setInterval(async () => {
     try {
+      if (Date.now() - lastTimetableRun > 30 * 60 * 1000) {
+        lastTimetableRun = Date.now();
+        const { generateSessionsFromTimetable } = await import("./timetable");
+        const n = await generateSessionsFromTimetable(getDb());
+        if (n) console.log(`[scheduler] timetable created ${n} session(s)`);
+      }
       await runSchedulerTasks();
     } catch (err) {
       console.error("[scheduler] error:", err);

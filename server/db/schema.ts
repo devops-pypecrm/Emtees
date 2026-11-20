@@ -16,7 +16,7 @@ import {
 import { relations } from "drizzle-orm";
 
 // Enums
-export const roleEnum = pgEnum("role", ["super_admin", "admin", "academic_head", "teacher", "student", "sales_executive"]);
+export const roleEnum = pgEnum("role", ["super_admin", "admin", "academic_head", "teacher", "student", "sales_executive", "accountant"]);
 export const statusEnum = pgEnum("status", ["active", "inactive", "suspended", "on_hold"]);
 export const paymentStatusEnum = pgEnum("payment_status", ["paid", "partial", "unpaid", "overdue"]);
 export const messageTypeEnum = pgEnum("message_type", ["text", "voice", "image", "video", "pdf"]);
@@ -360,6 +360,11 @@ export const oneToOneSessions = pgTable("one_to_one_sessions", {
   lastHeartbeatAt: timestamp("last_heartbeat_at"),
   recordingUrl: varchar("recording_url", { length: 500 }),
   recordingDeletedAt: timestamp("recording_deleted_at"),
+  // SRS 8.5 Google Meet fallback: manually recorded sessions are clearly marked and keep who entered them.
+  isManual: boolean("is_manual").default(false).notNull(),
+  meetLink: varchar("meet_link", { length: 500 }),
+  manualReason: text("manual_reason"),
+  enteredBy: bigint("entered_by", { mode: "number" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 },
 (table) => ({
@@ -1016,6 +1021,10 @@ export const demoClasses = pgTable("demo_classes", {
   jitsiRoom: varchar("jitsi_room", { length: 255 }).notNull(),
   status: varchar("status", { length: 30 }).default("pending").notNull(), // pending | completed | cancelled
   convertedToEnrollment: boolean("converted_to_enrollment").default(false).notNull(),
+  whatsapp: varchar("whatsapp", { length: 50 }),
+  acceptedAt: timestamp("accepted_at"),
+  studentAttended: boolean("student_attended"),
+  feedback: text("feedback"),
   completedAt: timestamp("completed_at"),
   durationMinutes: integer("duration_minutes"),
   notes: text("notes"),

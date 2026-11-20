@@ -12,6 +12,11 @@ import { qualificationsRouter } from "./routers/qualifications";
 import { salesRouter } from "./routers/sales";
 import { departmentRouter } from "./routers/departments";
 import { teacherReportsRouter } from "./routers/teacherReports";
+import { srsAdmissionsRouter } from "./routers/srsAdmissions";
+import { srsAcademicRouter } from "./routers/srsAcademic";
+import { srsFinanceRouter } from "./routers/srsFinance";
+import { srsClassesRouter } from "./routers/srsClasses";
+import { srsReportsRouter } from "./routers/srsReports";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -28,6 +33,11 @@ export const appRouter = createRouter({
   qualifications: qualificationsRouter,
   department: departmentRouter,
   teacherReports: teacherReportsRouter,
+  admissions: srsAdmissionsRouter,
+  academic: srsAcademicRouter,
+  finance: srsFinanceRouter,
+  lms: srsClassesRouter,
+  reports: srsReportsRouter,
 });
 
 export type AppRouter = typeof appRouter;

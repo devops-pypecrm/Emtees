@@ -317,6 +317,76 @@ export async function applyMigrations() {
     await client.query(`ALTER TYPE "attendance_status" ADD VALUE IF NOT EXISTS 'interrupted';`);
     await client.query(`ALTER TYPE "attendance_status" ADD VALUE IF NOT EXISTS 'technical_issue';`);
 
+    console.log("Creating SRS tables (admissions, audit, allocations, remuneration...)...");
+    await client.query(`ALTER TYPE "role" ADD VALUE IF NOT EXISTS 'accountant';`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "admissions" (
+        "id" serial PRIMARY KEY, "token" varchar(64) NOT NULL UNIQUE, "counsellor_id" bigint NOT NULL,
+        "student_user_id" bigint, "status" varchar(40) NOT NULL DEFAULT 'link_generated',
+        "department" varchar(20), "session_type" varchar(20), "preferred_timing" varchar(100),
+        "full_name" varchar(255), "mobile" varchar(30), "whatsapp" varchar(30), "email" varchar(320),
+        "gender" varchar(20), "date_of_birth" varchar(20), "place" varchar(255), "state" varchar(255), "country" varchar(255),
+        "amount_paid" decimal(10,2), "payment_date" varchar(20), "payment_method" varchar(50), "transaction_ref" varchar(255),
+        "receipt_url" varchar(500), "verified_amount" decimal(10,2), "verified_by" bigint, "verified_at" timestamp,
+        "reject_reason" text, "duplicate_of_user_id" bigint, "duplicate_resolved" boolean NOT NULL DEFAULT false, "demo_id" bigint,
+        "created_at" timestamp NOT NULL DEFAULT now(), "updated_at" timestamp NOT NULL DEFAULT now());
+      CREATE TABLE IF NOT EXISTS "admission_status_history" (
+        "id" serial PRIMARY KEY, "admission_id" bigint NOT NULL, "from_status" varchar(40), "to_status" varchar(40) NOT NULL,
+        "changed_by" bigint, "note" text, "created_at" timestamp NOT NULL DEFAULT now());
+      CREATE TABLE IF NOT EXISTS "audit_logs" (
+        "id" serial PRIMARY KEY, "user_id" bigint, "user_name" varchar(255), "action" varchar(80) NOT NULL, "entity" varchar(60) NOT NULL,
+        "entity_id" varchar(60), "previous_value" jsonb, "new_value" jsonb, "reason" text, "created_at" timestamp NOT NULL DEFAULT now());
+      CREATE INDEX IF NOT EXISTS "audit_entity_idx" ON "audit_logs" ("entity","entity_id");
+      CREATE TABLE IF NOT EXISTS "course_allocations" (
+        "id" serial PRIMARY KEY, "student_user_id" bigint NOT NULL, "admission_id" bigint, "kind" varchar(20) NOT NULL DEFAULT 'initial',
+        "classes" integer NOT NULL, "duration_minutes" integer NOT NULL DEFAULT 30, "session_type" varchar(20) NOT NULL DEFAULT 'individual',
+        "amount" decimal(10,2), "special_conditions" text, "reason" text, "created_by" bigint, "created_at" timestamp NOT NULL DEFAULT now());
+      CREATE TABLE IF NOT EXISTS "teacher_assignments" (
+        "id" serial PRIMARY KEY, "student_user_id" bigint NOT NULL, "teacher_id" bigint NOT NULL, "department" varchar(20),
+        "preferred_timing" varchar(100), "duration_minutes" integer, "classes_at_start" integer, "reason" varchar(50), "reason_note" text,
+        "assigned_by" bigint, "started_at" timestamp NOT NULL DEFAULT now(), "ended_at" timestamp);
+      CREATE TABLE IF NOT EXISTS "course_extensions" (
+        "id" serial PRIMARY KEY, "student_user_id" bigint NOT NULL, "original_expiry" timestamp, "revised_expiry" timestamp NOT NULL,
+        "days_added" integer, "reactivated_classes" integer DEFAULT 0, "reason" text NOT NULL, "approved_by" bigint, "created_at" timestamp NOT NULL DEFAULT now());
+      CREATE TABLE IF NOT EXISTS "remuneration_rules" (
+        "id" serial PRIMARY KEY, "teacher_id" bigint, "student_user_id" bigint, "course" varchar(20), "session_type" varchar(20),
+        "group_size" integer, "duration_minutes" integer, "kind" varchar(20) NOT NULL DEFAULT 'regular', "amount" decimal(10,2) NOT NULL,
+        "active" boolean NOT NULL DEFAULT true, "created_by" bigint, "created_at" timestamp NOT NULL DEFAULT now());
+      CREATE TABLE IF NOT EXISTS "remuneration_entries" (
+        "id" serial PRIMARY KEY, "teacher_id" bigint NOT NULL, "kind" varchar(20) NOT NULL, "one_to_one_session_id" bigint, "class_id" bigint,
+        "demo_id" bigint, "student_user_id" bigint, "rule_id" bigint, "amount" decimal(10,2) NOT NULL, "reason" text,
+        "status" varchar(20) NOT NULL DEFAULT 'pending', "approved_by" bigint, "paid_at" timestamp, "payment_method" varchar(50),
+        "transaction_id" varchar(255), "earned_at" timestamp NOT NULL DEFAULT now());
+      CREATE UNIQUE INDEX IF NOT EXISTS "rem_entry_session_uq" ON "remuneration_entries" ("one_to_one_session_id","kind") WHERE "one_to_one_session_id" IS NOT NULL AND "kind" IN ('regular','group');
+      CREATE UNIQUE INDEX IF NOT EXISTS "rem_entry_bonus_uq" ON "remuneration_entries" ("demo_id","kind") WHERE "demo_id" IS NOT NULL;
+      CREATE TABLE IF NOT EXISTS "teacher_availability" (
+        "id" serial PRIMARY KEY, "teacher_id" bigint NOT NULL, "working_days" varchar(40) NOT NULL DEFAULT '1,2,3,4,5,6',
+        "start_time" varchar(5) NOT NULL DEFAULT '09:00', "end_time" varchar(5) NOT NULL DEFAULT '18:00', "break_start" varchar(5), "break_end" varchar(5),
+        "max_workload" integer, "status" varchar(20) NOT NULL DEFAULT 'approved', "decided_by" bigint, "created_at" timestamp NOT NULL DEFAULT now());
+      CREATE TABLE IF NOT EXISTS "support_requests" (
+        "id" serial PRIMARY KEY, "from_user_id" bigint NOT NULL, "type" varchar(30) NOT NULL, "department" varchar(20),
+        "routed_to" varchar(30) NOT NULL DEFAULT 'academic_head', "message" text, "status" varchar(20) NOT NULL DEFAULT 'open',
+        "response" text, "resolved_by" bigint, "created_at" timestamp NOT NULL DEFAULT now());
+    `);
+    await client.query(`CREATE TABLE IF NOT EXISTS "timetable_slots" (
+      "id" serial PRIMARY KEY, "student_user_id" bigint NOT NULL, "teacher_id" bigint NOT NULL, "weekdays" varchar(20) NOT NULL,
+      "time_of_day" varchar(5) NOT NULL, "duration_minutes" integer NOT NULL DEFAULT 30, "starts_on" timestamp NOT NULL DEFAULT now(),
+      "active" boolean NOT NULL DEFAULT true, "on_hold" boolean NOT NULL DEFAULT false, "created_by" bigint, "created_at" timestamp NOT NULL DEFAULT now());`);
+    // One-off backfill: existing students get a current teacher assignment from their latest session (only if they have none).
+    await client.query(`INSERT INTO teacher_assignments (student_user_id, teacher_id, reason, started_at)
+      SELECT DISTINCT ON (s.student_id) s.student_id, s.teacher_id, 'initial', now()
+      FROM one_to_one_sessions s
+      WHERE NOT EXISTS (SELECT 1 FROM teacher_assignments a WHERE a.student_user_id = s.student_id)
+      ORDER BY s.student_id, s.scheduled_at DESC;`);
+    await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "is_manual" boolean NOT NULL DEFAULT false;`);
+    await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "meet_link" varchar(500);`);
+    await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "manual_reason" text;`);
+    await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "entered_by" bigint;`);
+    await client.query(`ALTER TABLE "demo_classes" ADD COLUMN IF NOT EXISTS "whatsapp" varchar(50);`);
+    await client.query(`ALTER TABLE "demo_classes" ADD COLUMN IF NOT EXISTS "accepted_at" timestamp;`);
+    await client.query(`ALTER TABLE "demo_classes" ADD COLUMN IF NOT EXISTS "student_attended" boolean;`);
+    await client.query(`ALTER TABLE "demo_classes" ADD COLUMN IF NOT EXISTS "feedback" text;`);
+
     console.log("Creating holidays table...");
     await client.query(`
       CREATE TABLE IF NOT EXISTS "holidays" (

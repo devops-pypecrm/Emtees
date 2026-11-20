@@ -11,6 +11,11 @@ export const SETTING_DEFAULTS = {
   course_validity_days: 60,
   /** Consecutive absences before an alert is raised. */
   absent_consecutive_threshold: 7,
+  rate_regular_30min: 75,
+  rate_demo: 50,
+  rate_demo_bonus: 100,
+  expiry_alert_days: 7,
+  low_balance_threshold: 3,
 } as const;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

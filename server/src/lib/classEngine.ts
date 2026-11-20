@@ -5,6 +5,7 @@ import { recalculateSalaryInternal } from "../routers/admin";
 import { NotificationService } from "./notificationService";
 import { computePair, REJOIN_GRACE_MINUTES as SHARED_REJOIN_GRACE_MINUTES } from "./sessionMinutes";
 import { getNumberSetting } from "./settings";
+import { recordClassRemuneration } from "./remuneration";
 
 // A class counts only if both parties stayed at least this many minutes (set to 20 by the owner).
 export const DEFAULT_CLASS_DURATION_THRESHOLD = 20;
@@ -108,6 +109,12 @@ async function applyStudentOutcome(c: OutcomeCtx, studentId: number, duration: n
           referenceOneToOneId: oneToOneSessionId || null,
           remarks: classId ? `Class ${classId} completed` : `1-to-1 Session ${oneToOneSessionId} completed`,
         });
+
+        // SRS 13.3: a remuneration entry is created the moment a qualifying class is recorded.
+        await recordClassRemuneration(db, {
+          teacherId, studentUserId: studentId, durationMinutes: cls.sessionLength || cls.duration || 30,
+          oneToOneSessionId: oneToOneSessionId || null, classId: classId || null,
+        }).catch((e: any) => console.error("[classEngine] remuneration entry failed:", e));
         
         // Also set validityEndDate if this is the FIRST class (and not Rejoin)
         if (!enrollment || !enrollment.isRejoin) {

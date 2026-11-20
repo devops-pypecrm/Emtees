@@ -52,3 +52,12 @@ export const teacherQuery = authedQuery.use(async ({ ctx, next }) => {
   }
   return next({ ctx });
 });
+
+/** Build a procedure restricted to the given roles (super_admin always allowed). */
+export const roleQuery = (...roles: string[]) =>
+  authedQuery.use(async ({ ctx, next }) => {
+    if (ctx.user.role !== "super_admin" && !roles.includes(ctx.user.role)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this action" });
+    }
+    return next({ ctx });
+  });
