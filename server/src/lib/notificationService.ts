@@ -23,9 +23,29 @@ export const NotificationService = {
    * Dispatch a notification across multiple channels
    */
   async dispatch(options: SendMessageOptions) {
-    const { userId, phone, email, subject, message, type, channels } = options;
+    let { phone, email } = options;
+    const { userId, subject, message, type, channels } = options;
 
     const results: Record<string, boolean> = {};
+
+    // Fill in missing contact details from the user record, and honour the admin switches (SRS 18, 19).
+    if ((channels.includes("email") && !email) || (channels.includes("whatsapp") && !phone)) {
+      try {
+        const { getDb } = await import("../queries/connection");
+        const { users } = await import("@db/schema");
+        const { eq } = await import("drizzle-orm");
+        const u = await getDb().query.users.findFirst({ where: eq(users.id, userId) });
+        email = email || u?.email || undefined;
+        phone = phone || u?.phone || undefined;
+      } catch { /* contact lookup is best-effort */ }
+    }
+    const off = async (key: string) => {
+      try {
+        const { getDb } = await import("../queries/connection");
+        const { getStringSetting } = await import("./settings");
+        return (await getStringSetting(getDb(), key, key === "notify_whatsapp" ? "no" : "yes")) === "no";
+      } catch { return false; }
+    };
 
     for (const channel of channels) {
       try {
@@ -36,7 +56,7 @@ export const NotificationService = {
             break;
 
           case "email":
-            if (email) {
+            if (email && !(await off("notify_email"))) {
               results["email"] = await this.sendEmail(email, subject || "Notification", message);
             }
             break;
@@ -48,7 +68,7 @@ export const NotificationService = {
             break;
 
           case "whatsapp":
-            if (phone) {
+            if (phone && !(await off("notify_whatsapp"))) {
               results["whatsapp"] = await this.sendWhatsApp(phone, message);
             }
             break;
@@ -103,9 +123,24 @@ export const NotificationService = {
     return true;
   },
 
+  /**
+   * WhatsApp Cloud API (Meta). Set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID in the server .env to send for real;
+   * without them messages are only logged. Free-form text works inside the 24-hour window; outside it Meta
+   * requires an approved template, which is a business-account setup step.
+   */
   async sendWhatsApp(phone: string, message: string) {
-    // TODO: Integrate Wati / Twilio / Meta Cloud API
-    console.log(`[SIMULATED WHATSAPP] To: ${phone} | Message: ${message}`);
-    return true;
+    const token = process.env.WHATSAPP_TOKEN, id = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    if (!token || !id) {
+      console.log(`[WHATSAPP not configured] To: ${phone} | Message: ${message}`);
+      return false;
+    }
+    let to = phone.replace(/[^\d]/g, "");
+    if (to.length === 10) to = "91" + to;
+    const res = await fetch(`https://graph.facebook.com/v20.0/${id}/messages`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: message } }),
+    });
+    if (!res.ok) console.error("[WHATSAPP] send failed:", res.status, await res.text().catch(() => ""));
+    return res.ok;
   }
 };

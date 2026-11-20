@@ -104,16 +104,22 @@ async function applyStudentOutcome(c: OutcomeCtx, studentId: number, duration: n
           studentId,
           enrollmentId: enrollment ? enrollment.id : null,
           type: "debit",
-          amount: 1, // 1 class credit
+          amount: Math.max(1, Number(cls.credits) || 1), // class credits deducted (group sessions can set more than 1)
           referenceClassId: classId || null,
           referenceOneToOneId: oneToOneSessionId || null,
           remarks: classId ? `Class ${classId} completed` : `1-to-1 Session ${oneToOneSessionId} completed`,
         });
 
         // SRS 13.3: a remuneration entry is created the moment a qualifying class is recorded.
+        let groupSize: number | undefined;
+        if (classId && cls.batchId) {
+          const [g] = await db.select({ n: sql<number>`count(*)` }).from(batchEnrollments).where(and(eq(batchEnrollments.batchId, cls.batchId), eq(batchEnrollments.status, "active")));
+          groupSize = Math.min(3, Math.max(2, Number(g?.n) || 2));
+        }
         await recordClassRemuneration(db, {
           teacherId, studentUserId: studentId, durationMinutes: cls.sessionLength || cls.duration || 30,
-          oneToOneSessionId: oneToOneSessionId || null, classId: classId || null,
+          oneToOneSessionId: oneToOneSessionId || null, classId: classId || null, groupSize,
+          payOverride: cls.payOverride != null ? Number(cls.payOverride) : null,
         }).catch((e: any) => console.error("[classEngine] remuneration entry failed:", e));
         
         // Also set validityEndDate if this is the FIRST class (and not Rejoin)

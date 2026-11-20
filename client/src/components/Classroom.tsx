@@ -4,7 +4,7 @@ import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import JitsiMeet from "@/components/JitsiMeet";
 
-type Room = { id: number; roomName: string; jwt: string | null; title: string; scheduledAt: any; teacherName?: string };
+type Room = { group?: boolean; id: number; roomName: string; jwt: string | null; title: string; scheduledAt: any; teacherName?: string };
 
 /**
  * One way to enter any 1-to-1 classroom (SRS 8.1). Teachers start the session first; students join once it is live.
@@ -16,6 +16,9 @@ export function useClassroom(onDone?: () => void) {
   const start = trpc.class.startOneToOne.useMutation();
   const join = trpc.class.joinOneToOne.useMutation();
   const end = trpc.class.endOneToOne.useMutation();
+  const startGroup = trpc.class.start.useMutation();
+  const endGroup = trpc.class.end.useMutation();
+  const utils = trpc.useUtils();
   const isTeacherLike = user?.role === "teacher" || user?.role === "super_admin";
 
   const open = async (session: { id: number; title?: string; scheduledAt?: any; status?: string; teacherName?: string }) => {
@@ -33,18 +36,28 @@ export function useClassroom(onDone?: () => void) {
     }
   };
 
+  /** Group classes (2-3 students): teacher starts, students are admitted by the teacher as usual. */
+  const openGroup = async (c: { id: number; title?: string; scheduledAt?: any }) => {
+    try {
+      if (isTeacherLike || user?.role === "admin" || user?.role === "academic_head") { if (isTeacherLike) await startGroup.mutateAsync({ id: c.id }); }
+      const d: any = await utils.class.getMeetingDetails.fetch({ classId: c.id });
+      setRoom({ group: true, id: c.id, roomName: d.roomName, jwt: d.jwt, title: d.title || c.title || "Group class", scheduledAt: d.scheduledAt || c.scheduledAt, teacherName: d.teacherName });
+    } catch (e: any) { toast.error(e.message || "Could not open the classroom"); }
+  };
+
   const element = room ? (
     <JitsiMeet
       classId={room.id}
-      isOneToOne
+      isOneToOne={!room.group}
       roomName={room.roomName}
       jwt={room.jwt}
       classInfo={{ title: room.title, scheduledAt: room.scheduledAt, teacherName: room.teacherName }}
       onLeave={async (eventName?: string) => {
+        if (room.group) { if (isTeacherLike && (eventName === "videoConferenceDestroyed" || eventName === "LeaveAndClose")) await endGroup.mutateAsync({ id: room.id }).catch(() => {}); return; }
         if (isTeacherLike && (eventName === "videoConferenceDestroyed" || eventName === "LeaveAndClose")) await end.mutateAsync({ sessionId: room.id }).catch(() => {});
       }}
       onClose={() => { setRoom(null); onDone?.(); }}
     />
   ) : null;
-  return { open, element, busy: start.isPending || join.isPending };
+  return { open, openGroup, element, busy: start.isPending || join.isPending || startGroup.isPending };
 }

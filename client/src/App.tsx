@@ -21,6 +21,7 @@ import Rates from "./pages/admin/Rates";
 import SettingsPage from "./pages/admin/Settings";
 import Audit from "./pages/admin/Audit";
 import Assign from "./pages/head/Assign";
+import Groups from "./pages/Groups";
 import Timetable from "./pages/head/Timetable";
 import Teachers from "./pages/head/Teachers";
 import Today from "./pages/teacher/Today";
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="requests" element={<Requests />} />
           <Route path="demos" element={<Demos />} />
           <Route path="students" element={<Students />} />
+          <Route path="groups" element={<Groups />} />
           {(isAdmin || role === "accountant") && <Route path="payments" element={<Payments />} />}
           {(isAdmin || role === "accountant") && <Route path="teacher-pay" element={<TeacherPay />} />}
           {isAdmin && <Route path="admissions" element={<AdminAdmissions />} />}

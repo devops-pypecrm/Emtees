@@ -3,7 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, gte, inArray, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { createRouter, authedQuery, roleQuery } from "../middleware";
 import { getDb } from "../queries/connection";
-import { users, profiles, oneToOneSessions, attendance, demoClasses, salesExecutives, attendanceEvents } from "@db/schema";
+import { users, profiles, oneToOneSessions, attendance, demoClasses, salesExecutives, attendanceEvents, modules, batches, batchEnrollments, classes } from "@db/schema";
+import { getStringSetting } from "../lib/settings";
 import { teacherAssignments, admissions, remunerationEntries } from "@db/srs-schema";
 import { audit } from "../lib/audit";
 import { evaluateClassCompletion } from "../lib/classEngine";
@@ -90,6 +91,7 @@ export const srsClassesRouter = createRouter({
     sessionId: z.number().optional(),
   })).mutation(async ({ ctx, input }) => {
     const db = getDb();
+    if ((await getStringSetting(db, "meet_fallback_enabled", "yes")) !== "yes") throw new TRPCError({ code: "FORBIDDEN", message: "Google Meet fallback is switched off in Settings" });
     const teacherId = ctx.user.role === "teacher" ? ctx.user.id : input.teacherId;
     if (!teacherId) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose the teacher" });
     if (input.endedAt <= input.startedAt) throw new TRPCError({ code: "BAD_REQUEST", message: "End time must be after start time" });
@@ -117,6 +119,59 @@ export const srsClassesRouter = createRouter({
     await evaluateClassCompletion(undefined, sessionId);
     await audit(db, ctx.user, "manual_class_recorded", "one_to_one_session", sessionId, null, { minutes, studentPresent: input.studentPresent, meetLink: input.meetLink }, input.reason);
     return { sessionId, minutes };
+  }),
+
+
+  // ---------------- group sessions: one teacher, 2-3 students (SRS 9) ----------------
+  createGroup: roleQuery(...heads).input(z.object({
+    name: z.string().trim().min(2), department: z.enum(["english", "hindi"]), teacherId: z.number(), studentIds: z.array(z.number()).min(2).max(3),
+    durationMinutes: z.number().int().min(10).max(240).default(30), credits: z.number().int().min(1).max(5).default(1),
+    scheduledAt: z.date(), payOverride: z.number().nonnegative().optional(), specialConditions: z.string().optional(),
+  })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const label = input.department === "hindi" ? "Spoken Hindi" : "Spoken English";
+    let [mod] = await db.select().from(modules).where(sql`${modules.name} ilike ${label}`).limit(1);
+    if (!mod) [mod] = await db.insert(modules).values({ name: label, status: "active" } as any).returning();
+    const [b] = await db.insert(batches).values({ moduleId: mod.id, name: input.name, sessionType: "group", teacherId: input.teacherId, maxStudents: 3, status: "active", startDate: input.scheduledAt } as any).returning();
+    for (const sid of input.studentIds) await db.insert(batchEnrollments).values({ batchId: b.id, studentId: sid, status: "active", paymentType: "FULL_PAYMENT", moduleId: mod.id } as any).onConflictDoNothing();
+    const room = `emtees-group-${b.id}-${Date.now()}`;
+    const [c] = await db.insert(classes).values({
+      batchId: b.id, teacherId: input.teacherId, title: input.name, classType: "group", status: "scheduled", scheduledAt: input.scheduledAt, duration: input.durationMinutes,
+      meetingRoomId: room, meetingUrl: `https://meet.gecouncil.com/${room}`, credits: input.credits, payOverride: input.payOverride != null ? String(input.payOverride) : null, specialConditions: input.specialConditions,
+    } as any).returning();
+    await audit(db, ctx.user, "group_session_created", "class", c.id, null, { students: input.studentIds, teacherId: input.teacherId, credits: input.credits, payOverride: input.payOverride }, input.specialConditions);
+    for (const sid of input.studentIds) await NotificationService.dispatch({ userId: sid, subject: "Group class scheduled", message: `${input.name} on ${input.scheduledAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`, type: "class_scheduled", channels: ["in_app"] }).catch(() => {});
+    return { batchId: b.id, classId: c.id };
+  }),
+  /** Another class for an existing group (same students, teacher, credits and pay settings). */
+  scheduleGroupClass: roleQuery(...heads).input(z.object({ batchId: z.number(), scheduledAt: z.date() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const [last] = await db.select().from(classes).where(eq(classes.batchId, input.batchId)).orderBy(desc(classes.scheduledAt)).limit(1);
+    const [b] = await db.select().from(batches).where(eq(batches.id, input.batchId));
+    if (!b) throw new TRPCError({ code: "NOT_FOUND" });
+    const room = `emtees-group-${b.id}-${Date.now()}`;
+    const [c] = await db.insert(classes).values({ batchId: b.id, teacherId: b.teacherId ?? last?.teacherId, title: b.name, classType: "group", status: "scheduled", scheduledAt: input.scheduledAt, duration: last?.duration ?? 30,
+      meetingRoomId: room, meetingUrl: `https://meet.gecouncil.com/${room}`, credits: last?.credits ?? 1, payOverride: last?.payOverride ?? null, specialConditions: last?.specialConditions ?? null } as any).returning();
+    await audit(db, ctx.user, "group_class_scheduled", "class", c.id, null, { batchId: b.id, at: input.scheduledAt });
+    return { classId: c.id };
+  }),
+  groups: authedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+    if (!["admin", "super_admin", "academic_head", "teacher", "student"].includes(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN" });
+    const rows = await db.execute(sql`
+      select b.id batch_id, b.name, b.teacher_id, (select name from users where id=b.teacher_id) teacher_name, m.name course,
+        (select json_agg(json_build_object('id', u.id, 'name', u.name)) from batch_enrollments e join users u on u.id=e.student_id where e.batch_id=b.id and e.status='active') students,
+        (select json_build_object('id', c.id, 'status', c.status, 'scheduledAt', c.scheduled_at, 'credits', c.credits, 'duration', c.duration) from classes c where c.batch_id=b.id and c.status in ('scheduled','ongoing') order by c.scheduled_at limit 1) next_class
+      from batches b join modules m on m.id=b.module_id where b.session_type='group' and b.max_students<=3 and b.status='active' order by b.id desc limit 200`);
+    let out = rows.rows as any[];
+    if (ctx.user.role === "teacher") out = out.filter((r) => Number(r.teacher_id) === ctx.user.id);
+    if (ctx.user.role === "student") out = out.filter((r) => (r.students || []).some((s: any) => s.id === ctx.user.id));
+    return out.map((r) => ({ batchId: Number(r.batch_id), name: r.name, teacherId: Number(r.teacher_id), teacherName: r.teacher_name, course: r.course, students: r.students || [], nextClass: r.next_class }));
+  }),
+  studentsForGroup: roleQuery(...heads).query(async () => {
+    const db = getDb();
+    const rows = await db.execute(sql`select u.id, u.name, p.enrollment_id, p.department from users u join profiles p on p.user_id=u.id where u.role='student' and u.status='active' and p.total_allocated_sessions>0 order by u.name limit 1500`);
+    return rows.rows as any[];
   }),
 
   // ---------------- teacher dashboard (SRS 7.2, 12.1) ----------------

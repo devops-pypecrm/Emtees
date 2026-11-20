@@ -5,8 +5,8 @@ import crypto from "crypto";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { createRouter, roleQuery } from "../middleware";
 import { getDb } from "../queries/connection";
-import { users, salesExecutives, systemSettings } from "@db/schema";
-import { staffProfiles } from "@db/srs-schema";
+import { users, salesExecutives, systemSettings, profiles } from "@db/schema";
+import { staffProfiles, admissions } from "@db/srs-schema";
 import { audit } from "../lib/audit";
 import { getNextUniqueId } from "../lib/idGenerator";
 
@@ -22,6 +22,7 @@ export const CONFIG = {
   expiry_alert_days: { label: "Warn about expiry this many days before", def: "7", type: "number" },
   low_balance_threshold: { label: "Low class balance (classes left)", def: "3", type: "number" },
   absent_consecutive_threshold: { label: "Consecutive absences before alert", def: "7", type: "number" },
+  auto_expire_classes: { label: "Automatically write off unused classes after validity ends", def: "no", type: "toggle" },
   meet_fallback_enabled: { label: "Allow Google Meet fallback (manual class records)", def: "yes", type: "toggle" },
   notify_email: { label: "Send email notifications", def: "yes", type: "toggle" },
   notify_whatsapp: { label: "Send WhatsApp notifications (needs API access)", def: "no", type: "toggle" },
@@ -63,10 +64,10 @@ export const srsStaffRouter = createRouter({
     const conds: any[] = [ne_student()];
     if (input?.role) conds.push(eq(users.role, input.role === "counsellor" ? "sales_executive" : (input.role as any)));
     if (input?.search) conds.push(or(ilike(users.name, `%${input.search}%`), ilike(users.phone, `%${input.search}%`), ilike(users.username, `%${input.search}%`)));
-    const rows = await db.select({ u: users, p: staffProfiles }).from(users).leftJoin(staffProfiles, eq(staffProfiles.userId, users.id)).where(and(...conds)).orderBy(users.role, users.name).limit(1000);
+    const rows = await db.select({ u: users, p: staffProfiles, se: salesExecutives.id }).from(users).leftJoin(staffProfiles, eq(staffProfiles.userId, users.id)).leftJoin(salesExecutives, eq(salesExecutives.userId, users.id)).where(and(...conds)).orderBy(users.role, users.name).limit(1000);
     return rows.map((r: any) => ({
-      id: r.u.id, name: r.u.name, username: r.u.username, rawPassword: r.u.rawPassword, role: r.u.role === "sales_executive" ? "counsellor" : r.u.role,
-      phone: r.u.phone, email: r.u.email, status: r.u.status, department: r.u.department, ...(r.p ?? {}), id2: r.p?.id,
+      ...(r.p ?? {}), id: r.u.id, name: r.u.name, username: r.u.username, rawPassword: r.u.rawPassword, role: r.u.role === "sales_executive" ? "counsellor" : r.u.role,
+      phone: r.u.phone, email: r.u.email, status: r.u.status, department: r.u.department, id2: r.se ?? undefined,
     }));
   }),
 
@@ -134,22 +135,32 @@ export const srsStaffRouter = createRouter({
     const conds: any[] = [eq(users.role, "student")];
     if (input?.search) conds.push(sql`(${users.name} ilike ${"%" + input.search + "%"} or ${users.phone} ilike ${"%" + input.search + "%"} or exists (select 1 from profiles p where p.user_id=${users.id} and p.enrollment_id ilike ${"%" + input.search + "%"}))`);
     if (ctx.user.role === "sales_executive") conds.push(sql`${users.salesExecutiveId} = (select id from sales_executives where user_id=${ctx.user.id})`);
-    const rows = await db.execute(sql`select u.id, u.name, u.phone, u.email, u.status, u.username, u.raw_password, p.enrollment_id, p.course, p.department, p.total_allocated_sessions allocated,
+    const rows = await db.execute(sql`select u.id, u.name, u.phone, u.email, u.status, u.username, u.raw_password, p.enrollment_id, p.course, p.department, p.session_type, p.preferred_class_time, p.validity_end_date, u.sales_executive_id counsellor_id, p.total_allocated_sessions allocated,
       (select name from sales_executives where id=u.sales_executive_id) counsellor,
       (select t.name from teacher_assignments a join users t on t.id=a.teacher_id where a.student_user_id=u.id and a.ended_at is null limit 1) teacher
       from users u left join profiles p on p.user_id=u.id where ${and(...conds)} order by u.created_at desc limit ${input?.limit ?? 100}`);
     const showPw = ["admin", "super_admin"].includes(ctx.user.role);
     return (rows.rows as any[]).map((r) => ({ ...r, raw_password: showPw ? r.raw_password : undefined }));
   }),
-  updateStudent: roleQuery("admin").input(z.object({ id: z.number(), name: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), status: z.enum(["active", "inactive", "suspended", "on_hold"]).optional(), password: z.string().min(6).optional(), reason: z.string().optional() }))
+  updateStudent: roleQuery("admin").input(z.object({ id: z.number(), name: z.string().optional(), phone: z.string().optional(), email: z.string().optional(), status: z.enum(["active", "inactive", "suspended", "on_hold"]).optional(), password: z.string().min(6).optional(), reason: z.string().optional(),
+    department: z.enum(["english", "hindi"]).optional(), sessionType: z.enum(["individual", "group"]).optional(), preferredTiming: z.string().optional(), counsellorId: z.number().optional(), validityEndDate: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      const { id, reason, password, ...rest } = input;
+      const { id, reason, password, department, sessionType, preferredTiming, counsellorId, validityEndDate, ...rest } = input;
+      const pset: any = {};
+      if (department) { pset.department = department === "hindi" ? "Spoken Hindi" : "Spoken English"; pset.course = pset.department; }
+      if (sessionType) { pset.sessionType = sessionType === "group" ? "group" : "one_to_one"; pset.oneOnOneEnabled = sessionType === "individual"; pset.groupSessionEnabled = sessionType === "group"; }
+      if (preferredTiming !== undefined) pset.preferredClassTime = preferredTiming;
+      if (validityEndDate) pset.validityEndDate = new Date(validityEndDate);
+      if (Object.keys(pset).length) await db.update(profiles).set(pset).where(eq(profiles.userId, id));
+      if (department) await db.update(users).set({ department: pset.department }).where(eq(users.id, id));
+      if (counsellorId) { await db.update(users).set({ salesExecutiveId: counsellorId }).where(eq(users.id, id)); await db.update(admissions).set({ counsellorId }).where(eq(admissions.studentUserId, id)); }
+      if (department || sessionType || preferredTiming !== undefined) await db.update(admissions).set({ ...(department ? { department } : {}), ...(sessionType ? { sessionType } : {}), ...(preferredTiming !== undefined ? { preferredTiming } : {}), updatedAt: new Date() }).where(eq(admissions.studentUserId, id));
       const prev = await db.query.users.findFirst({ where: eq(users.id, id) });
       const set: any = { ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)), updatedAt: new Date() };
       if (password) { set.password = await bcrypt.hash(password, 10); set.rawPassword = password; }
       await db.update(users).set(set).where(eq(users.id, id));
-      await audit(db, ctx.user, "student_details_modified", "student", id, { name: prev?.name, phone: prev?.phone, email: prev?.email, status: prev?.status }, { ...rest, password: password ? "(changed)" : undefined }, reason);
+      await audit(db, ctx.user, "student_details_modified", "student", id, { name: prev?.name, phone: prev?.phone, email: prev?.email, status: prev?.status }, { ...rest, department, sessionType, preferredTiming, counsellorId, validityEndDate, password: password ? "(changed)" : undefined }, reason);
       return { ok: true };
     }),
 });

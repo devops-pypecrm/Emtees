@@ -382,6 +382,43 @@ export async function applyMigrations() {
       "id" serial PRIMARY KEY, "user_id" bigint NOT NULL UNIQUE, "employee_id" varchar(50), "whatsapp" varchar(30), "departments" varchar(40),
       "languages" varchar(255), "qualification" varchar(255), "team" varchar(100), "joining_date" varchar(20), "employment_status" varchar(30) DEFAULT 'active',
       "created_at" timestamp NOT NULL DEFAULT now());`);
+    // ---- Existing student data -> SRS records (idempotent: only fills what is missing) ----
+    console.log("Backfilling allocations and admissions for existing students...");
+    await client.query(`INSERT INTO course_allocations (student_user_id, kind, classes, duration_minutes, session_type, reason)
+      SELECT p.user_id, 'initial', p.total_allocated_sessions, 30,
+             CASE WHEN p.session_type = 'group' THEN 'group' ELSE 'individual' END, 'Imported from existing student record'
+      FROM profiles p JOIN users u ON u.id = p.user_id
+      WHERE u.role = 'student' AND p.total_allocated_sessions > 0
+        AND NOT EXISTS (SELECT 1 FROM course_allocations c WHERE c.student_user_id = p.user_id);`);
+    await client.query(`INSERT INTO admissions (token, counsellor_id, student_user_id, status, department, session_type, preferred_timing, full_name, mobile, email,
+        amount_paid, verified_amount, verified_at, payment_method, created_at)
+      SELECT md5(random()::text || u.id::text), COALESCE(u.sales_executive_id, (SELECT min(id) FROM sales_executives)), u.id,
+        CASE
+          WHEN p.validity_end_date IS NOT NULL AND p.validity_end_date < now() THEN 'expired'
+          WHEN COALESCE(p.total_allocated_sessions,0) > 0 AND EXISTS (SELECT 1 FROM teacher_assignments a WHERE a.student_user_id = u.id AND a.ended_at IS NULL) THEN 'active'
+          WHEN COALESCE(p.total_allocated_sessions,0) > 0 THEN 'awaiting_assignment'
+          ELSE 'registration_completed' END,
+        CASE WHEN COALESCE(p.department, u.department, '') ILIKE '%hindi%' THEN 'hindi' ELSE 'english' END,
+        CASE WHEN p.session_type = 'group' THEN 'group' ELSE 'individual' END, p.preferred_class_time, u.name, u.phone, u.email,
+        (SELECT sum(pay.amount) FROM payments pay WHERE pay.student_id = u.id AND pay.payment_status = 'paid'),
+        (SELECT sum(pay.amount) FROM payments pay WHERE pay.student_id = u.id AND pay.payment_status = 'paid'),
+        CASE WHEN EXISTS (SELECT 1 FROM payments pay WHERE pay.student_id = u.id AND pay.payment_status = 'paid') THEN now() END,
+        'imported', u.created_at
+      FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+      WHERE u.role = 'student' AND EXISTS (SELECT 1 FROM sales_executives)
+        AND NOT EXISTS (SELECT 1 FROM admissions a WHERE a.student_user_id = u.id);`);
+    await client.query(`INSERT INTO admission_status_history (admission_id, to_status, note)
+      SELECT a.id, a.status, 'Imported from existing student record' FROM admissions a
+      WHERE a.payment_method = 'imported' AND NOT EXISTS (SELECT 1 FROM admission_status_history h WHERE h.admission_id = a.id);`);
+    // Testing: minimum qualifying minutes 1 -> 5 (one time only; later changes in Settings are never overwritten).
+    const m5 = await client.query(`INSERT INTO system_settings (key, value) VALUES ('migration_min5_applied','yes') ON CONFLICT (key) DO NOTHING RETURNING key`);
+    if (m5.rowCount) {
+      await client.query(`INSERT INTO system_settings (key, value) VALUES ('class_duration_threshold','5')
+        ON CONFLICT (key) DO UPDATE SET value='5', updated_at=now();`);
+    }
+    await client.query(`ALTER TABLE "classes" ADD COLUMN IF NOT EXISTS "credits" integer NOT NULL DEFAULT 1;`);
+    await client.query(`ALTER TABLE "classes" ADD COLUMN IF NOT EXISTS "pay_override" decimal(10,2);`);
+    await client.query(`ALTER TABLE "classes" ADD COLUMN IF NOT EXISTS "special_conditions" text;`);
     await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "is_manual" boolean NOT NULL DEFAULT false;`);
     await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "meet_link" varchar(500);`);
     await client.query(`ALTER TABLE "one_to_one_sessions" ADD COLUMN IF NOT EXISTS "manual_reason" text;`);

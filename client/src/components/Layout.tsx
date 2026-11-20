@@ -18,12 +18,12 @@ export function navFor(role: string): Item[] {
   switch (role) {
     case "sales_executive": return [I("/", "Admissions", UserPlus), I("/demos", "Demo classes", Video), I("/students", "My students", Users), I("/reports", "Reports", BarChart3)];
     case "accountant": return [I("/", "Payments", CreditCard), I("/teacher-pay", "Teacher pay", Wallet), I("/students", "Students", Users), I("/reports", "Reports", BarChart3)];
-    case "academic_head": return [I("/", "Overview", Home), I("/assign", "Assign teachers", UserCheck), I("/students", "Students", Users), I("/timetable", "Timetable", Calendar), I("/teachers", "Teachers", GraduationCap), I("/requests", "Requests", MessageSquare), I("/demos", "Demo classes", Video), I("/reports", "Reports", BarChart3)];
-    case "teacher": return [I("/", "Today", Home), I("/my-students", "My students", Users), I("/demos", "Demo classes", Video), I("/earnings", "Earnings", Wallet), I("/availability", "Availability", Clock), I("/requests", "Requests", MessageSquare), I("/reports", "Reports", BarChart3)];
-    case "student": return [I("/", "My course", Home), I("/classes", "Classes", ClipboardList), I("/requests", "Requests", MessageSquare)];
+    case "academic_head": return [I("/", "Overview", Home), I("/assign", "Assign teachers", UserCheck), I("/students", "Students", Users), I("/timetable", "Timetable", Calendar), I("/groups", "Group sessions", Users), I("/teachers", "Teachers", GraduationCap), I("/requests", "Requests", MessageSquare), I("/demos", "Demo classes", Video), I("/reports", "Reports", BarChart3)];
+    case "teacher": return [I("/", "Today", Home), I("/my-students", "My students", Users), I("/groups", "Group sessions", Users), I("/demos", "Demo classes", Video), I("/earnings", "Earnings", Wallet), I("/availability", "Availability", Clock), I("/requests", "Requests", MessageSquare), I("/reports", "Reports", BarChart3)];
+    case "student": return [I("/", "My course", Home), I("/classes", "Classes", ClipboardList), I("/groups", "Group sessions", Users), I("/requests", "Requests", MessageSquare)];
     default: return [ // admin + super_admin
       I("/", "Overview", Home), I("/admissions", "Admissions", UserPlus), I("/payments", "Payments", CreditCard), I("/assign", "Assign teachers", UserCheck), I("/students", "Students", Users),
-      I("/timetable", "Timetable", Calendar), I("/people", "Staff", GraduationCap), I("/teacher-pay", "Teacher pay", Wallet), I("/rates", "Pay rates", Percent), I("/requests", "Requests", MessageSquare),
+      I("/timetable", "Timetable", Calendar), I("/groups", "Group sessions", Users), I("/people", "Staff", GraduationCap), I("/teacher-pay", "Teacher pay", Wallet), I("/rates", "Pay rates", Percent), I("/requests", "Requests", MessageSquare),
       I("/demos", "Demo classes", Video), I("/reports", "Reports", BarChart3), I("/audit", "Audit log", Shield), I("/settings", "Settings", Settings),
     ];
   }

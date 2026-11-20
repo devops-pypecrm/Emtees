@@ -25,3 +25,8 @@ export async function getNumberSetting(db: any, key: SettingKey): Promise<number
   const n = row ? parseInt(row.value, 10) : NaN;
   return Number.isFinite(n) && n > 0 ? n : SETTING_DEFAULTS[key];
 }
+
+export async function getStringSetting(db: any, key: string, fallback: string): Promise<string> {
+  const row = await db.query.systemSettings.findFirst({ where: eq(systemSettings.key, key) });
+  return row?.value ?? fallback;
+}

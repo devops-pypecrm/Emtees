@@ -41,7 +41,7 @@ export async function resolveRate(db: any, q: Query): Promise<{ amount: number; 
 /** One entry per qualifying 1-to-1 session or class, frozen at today's rate (SRS 13.3). Idempotent. */
 export async function recordClassRemuneration(db: any, p: {
   teacherId: number; studentUserId: number; course?: string | null; durationMinutes: number;
-  oneToOneSessionId?: number | null; classId?: number | null; groupSize?: number;
+  oneToOneSessionId?: number | null; classId?: number | null; groupSize?: number; payOverride?: number | null;
 }) {
   const kind = p.classId ? "group" : "regular";
   const where = p.classId
@@ -49,7 +49,7 @@ export async function recordClassRemuneration(db: any, p: {
     : and(eq(remunerationEntries.oneToOneSessionId, p.oneToOneSessionId!), eq(remunerationEntries.kind, "regular"));
   const [exists] = await db.select({ id: remunerationEntries.id }).from(remunerationEntries).where(where).limit(1);
   if (exists) return;
-  const { amount, ruleId } = await resolveRate(db, {
+  const { amount, ruleId } = p.payOverride != null ? { amount: p.payOverride, ruleId: null } : await resolveRate(db, {
     teacherId: p.teacherId, studentUserId: p.studentUserId, course: p.course,
     sessionType: p.classId ? "group" : "individual", groupSize: p.groupSize ?? null,
     durationMinutes: p.durationMinutes, kind: "regular",

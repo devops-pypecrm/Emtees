@@ -306,6 +306,10 @@ export const classes = pgTable("classes", {
   reminder1DaySentAt: timestamp("reminder_1day_sent_at"),
   reminder1HourSentAt: timestamp("reminder_1hour_sent_at"),
   reminder10MinSentAt: timestamp("reminder_10min_sent_at"),
+  // SRS 9.2 group session configuration
+  credits: integer("credits").default(1).notNull(),
+  payOverride: decimal("pay_override", { precision: 10, scale: 2 }),
+  specialConditions: text("special_conditions"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

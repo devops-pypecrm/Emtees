@@ -759,6 +759,7 @@ export function startScheduler(): void {
     return;
   }
   let lastTimetableRun = 0;
+  let lastSrsJobs = 0;
   setInterval(async () => {
     try {
       if (Date.now() - lastTimetableRun > 30 * 60 * 1000) {
@@ -766,6 +767,11 @@ export function startScheduler(): void {
         const { generateSessionsFromTimetable } = await import("./timetable");
         const n = await generateSessionsFromTimetable(getDb());
         if (n) console.log(`[scheduler] timetable created ${n} session(s)`);
+      }
+      if (Date.now() - lastSrsJobs > 60 * 60 * 1000) {
+        lastSrsJobs = Date.now();
+        const { runSrsJobs } = await import("./srsJobs");
+        await runSrsJobs(getDb());
       }
       await runSchedulerTasks();
     } catch (err) {
