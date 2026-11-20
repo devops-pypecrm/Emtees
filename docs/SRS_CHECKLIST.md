@@ -542,25 +542,25 @@ Delete the §D features and drop their tables; database documentation, user manu
 
 | Section | ✅ | 🟡 | ❌ | ⚠️ |
 |---|---|---|---|---|
-| 1–2. Overview, roles and objectives | 13 | 4 | 3 | 3 |
-| 3. Student admission and registration | 6 | 6 | 4 | 0 |
-| 4. Demo class management | 6 | 5 | 3 | 0 |
-| 5. Payment verification and course activation | 3 | 2 | 6 | 0 |
-| 6. Academic management and teacher assignment | 4 | 5 | 2 | 0 |
-| 7. Timetable and scheduling | 5 | 7 | 3 | 0 |
-| 8. Live video classroom | 10 | 5 | 6 | 5 |
-| 9. Individual and group sessions | 1 | 3 | 1 | 1 |
-| 10. Class credit and balance | 2 | 3 | 2 | 1 |
-| 11. Validity and expiry | 3 | 3 | 2 | 1 |
-| 12. Teacher portal | 6 | 8 | 4 | 0 |
-| 13. Trainer remuneration | 1 | 2 | 7 | 2 |
-| 14. Student portal | 5 | 3 | 3 | 0 |
-| 15. Academic Head dashboard | 3 | 7 | 1 | 0 |
-| 16. Attendance | 5 | 1 | 2 | 0 |
-| 17. Reports and analytics (all need custom date range, filte | 0 | 6 | 1 | 0 |
-| 18. Notifications and reminders | 2 | 4 | 1 | 0 |
-| 19. Admin and super-admin controls | 2 | 2 | 5 | 0 |
-| 20. Access control and security | 0 | 1 | 1 | 1 |
-| 21. Architecture and data entities | 2 | 1 | 0 | 0 |
-| 22. The 21 business rules ("must not be changed") | 9 | 3 | 4 | 5 |
-| 23–24. Phases and deliverables | 2 | 4 | 5 | 1 |
+| 1–2. Overview, roles and objectives | 19 | 4 | 0 | 0 |
+| 3. Student admission and registration | 16 | 0 | 0 | 0 |
+| 4. Demo class management | 13 | 1 | 0 | 0 |
+| 5. Payment verification and course activation | 11 | 0 | 0 | 0 |
+| 6. Academic management and teacher assignment | 11 | 0 | 0 | 0 |
+| 7. Timetable and scheduling | 15 | 0 | 0 | 0 |
+| 8. Live video classroom | 23 | 2 | 1 | 0 |
+| 9. Individual and group sessions | 6 | 0 | 0 | 0 |
+| 10. Class credit and balance | 7 | 1 | 0 | 0 |
+| 11. Validity and expiry | 8 | 1 | 0 | 0 |
+| 12. Teacher portal | 15 | 2 | 1 | 0 |
+| 13. Trainer remuneration | 12 | 0 | 0 | 0 |
+| 14. Student portal | 9 | 2 | 0 | 0 |
+| 15. Academic Head dashboard | 8 | 3 | 0 | 0 |
+| 16. Attendance | 6 | 2 | 0 | 0 |
+| 17. Reports and analytics (all need custom date range, filters, Excel and PDF export) | 5 | 2 | 0 | 0 |
+| 18. Notifications and reminders | 5 | 1 | 1 | 0 |
+| 19. Admin and super-admin controls | 8 | 0 | 1 | 0 |
+| 20. Access control and security | 1 | 1 | 1 | 0 |
+| 21. Architecture and data entities | 3 | 0 | 0 | 0 |
+| 22. The 21 business rules ("must not be changed") | 21 | 0 | 0 | 0 |
+| 23–24. Phases and deliverables | 7 | 4 | 1 | 0 |
