@@ -4,7 +4,9 @@ import { Plus } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import { Page, Table, Chip, Button, Input, Field, Pick, FormDialog, useForm, fmtDate } from "@/lib/kit";
 import { ROLE_LABEL } from "@/components/Layout";
+import StudentDetail from "@/components/StudentDetail";
 
+const TABS = [{ value: "", label: "All" }, { value: "student", label: "Students" }, { value: "teacher", label: "Teachers" }, { value: "counsellor", label: "Counsellors" }, { value: "academic_head", label: "Academic heads" }, { value: "accountant", label: "Accountants" }, { value: "admin", label: "Admins" }];
 const ROLE_OPTS = [{ value: "teacher", label: "Teacher" }, { value: "counsellor", label: "Academic Counsellor" }, { value: "academic_head", label: "Academic Head" }, { value: "accountant", label: "Accountant" }, { value: "admin", label: "Administrator" }];
 const DEPT_MULTI = [{ value: "english", label: "Spoken English only" }, { value: "hindi", label: "Spoken Hindi only" }, { value: "english,hindi", label: "Both English and Hindi" }];
 
@@ -12,7 +14,13 @@ const DEPT_MULTI = [{ value: "english", label: "Spoken English only" }, { value:
 export default function People() {
   const [role, setRole] = useState("");
   const [search, setSearch] = useState("");
-  const list = trpc.staff.list.useQuery({ role: role || undefined, search: search || undefined });
+  const all = trpc.staff.list.useQuery({ includeStudents: true, search: search || undefined });
+  const list = all;
+  const [shown, setShown] = useState(100);
+  const [sel, setSel] = useState<number | null>(null);
+  const rowsAll: any[] | undefined = all.data;
+  const count = (r: string) => (rowsAll || []).filter((u) => !r || u.role === r || (r === "admin" && u.role === "super_admin")).length;
+  const filtered = rowsAll && rowsAll.filter((u) => !role || u.role === role || (role === "admin" && u.role === "super_admin"));
   const create = trpc.staff.create.useMutation({ onSuccess: (r) => { toast.success(`Created — employee ID ${r.employeeId}`); list.refetch(); setOpen(false); f.reset(); }, onError: (e) => toast.error(e.message) });
   const update = trpc.staff.update.useMutation({ onSuccess: () => { toast.success("Saved"); list.refetch(); setEdit(null); }, onError: (e) => toast.error(e.message) });
   const [open, setOpen] = useState(false);
@@ -23,18 +31,22 @@ export default function People() {
   const showDept = (v: any) => (v.departments ? String(v.departments).split(",").filter(Boolean).map((d: string) => (d === "hindi" ? "Hindi" : "English")).join(" + ") : "—");
 
   return (
-    <Page title="Staff" subtitle="Teachers, counsellors, academic heads, accountants and administrators."
-      actions={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4 mr-1" />Add staff</Button>}>
-      <div className="flex flex-wrap gap-3 max-w-xl"><div className="w-52"><Pick value={role} onChange={setRole} placeholder="All roles" options={ROLE_OPTS} /></div><Input className="w-64" placeholder="Search name, phone, username" value={search} onChange={(x) => setSearch(x.target.value)} /></div>
-      <Table rows={list.data} empty="No staff found"
+    <Page title="Users" subtitle="Everyone in one place — students, teachers, counsellors, heads, accountants and administrators."
+      actions={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4 mr-1" />Add staff member</Button>}>
+      <div className="flex flex-wrap gap-2">{TABS.map((t) => <button key={t.value} onClick={() => { setRole(t.value); setShown(100); }} className={`px-3.5 py-1.5 rounded-full text-sm border transition-colors ${role === t.value ? "bg-[#1D2A44] text-white border-[#1D2A44]" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{t.label} <span className="opacity-60">{rowsAll ? count(t.value) : ""}</span></button>)}</div>
+      <div className="max-w-sm"><Input placeholder="Search name, mobile or username" value={search} onChange={(x) => { setSearch(x.target.value); setShown(100); }} /></div>
+      <Table searchable={false} rows={filtered?.slice(0, shown)} empty="No users found" onRow={(u: any) => u.role === "student" && setSel(u.id)}
         cols={[
           { header: "Name", cell: (u: any) => <div><div className="font-medium">{u.name}</div><div className="text-xs text-slate-500">{u.employeeId || ""}</div></div> },
           { header: "Role", cell: (u: any) => ROLE_LABEL[u.role === "counsellor" ? "sales_executive" : u.role] || u.role },
           { header: "Dept", cell: showDept }, { header: "Contact", cell: (u: any) => <div className="text-xs">{u.phone}<div>{u.email}</div></div> },
           { header: "Login", cell: (u: any) => <div className="text-xs">{u.username}<div className="text-slate-500">{u.rawPassword}</div></div> },
           { header: "Joined", cell: (u: any) => u.joiningDate || "—" }, { header: "Status", cell: (u: any) => <Chip value={u.status} /> },
-          { header: "", cell: (u: any) => <Button size="sm" variant="outline" onClick={() => { setEdit(u); e.setAll({ name: u.name, phone: u.phone || "", whatsapp: u.whatsapp || "", email: u.email || "", password: "", status: u.status, dept: u.departments || "", qualification: u.qualification || "", team: u.team || "" }); }}>Edit</Button> },
+          { header: "", cell: (u: any) => u.role === "student" ? <Button size="sm" variant="outline" onClick={() => setSel(u.id)}>Open</Button> : <Button size="sm" variant="outline" onClick={() => { setEdit(u); e.setAll({ name: u.name, phone: u.phone || "", whatsapp: u.whatsapp || "", email: u.email || "", password: "", status: u.status, dept: u.departments || "", qualification: u.qualification || "", team: u.team || "" }); }}>Edit</Button> },
         ]} />
+
+      {filtered && filtered.length > shown && <div className="text-center"><Button variant="outline" onClick={() => setShown((n) => n + 100)}>Show more ({filtered.length - shown} left)</Button></div>}
+      {sel && <StudentDetail id={sel} onClose={() => setSel(null)} />}
 
       <FormDialog wide open={open} onClose={() => setOpen(false)} title="Add staff member" busy={create.isPending}
         onSubmit={() => { const v = f.v; create.mutate({ role: v.role as any, name: v.name, username: v.username, password: v.password, phone: v.phone, whatsapp: v.whatsapp || undefined, email: v.email || undefined, departments: needsDept ? (v.dept.split(",") as any) : [], qualification: v.qualification || undefined, languages: v.languages || undefined, team: v.team || undefined, joiningDate: v.joiningDate || undefined, employeeId: v.employeeId || undefined }); }}>

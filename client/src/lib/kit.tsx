@@ -61,23 +61,32 @@ export function Loading({ text = "Loading…" }: { text?: string }) {
 export const Empty = ({ text }: { text: string }) => <div className="text-center text-sm text-slate-400 py-16 border border-dashed border-slate-200 rounded-xl bg-white">{text}</div>;
 
 export type Col<T> = { header: string; cell: (r: T) => ReactNode; className?: string };
-export function Table<T>({ cols, rows, empty = "Nothing to show", onRow }: { cols: Col<T>[]; rows: T[] | undefined; empty?: string; onRow?: (r: T) => void }) {
+export function Table<T>({ cols, rows, empty = "Nothing to show", onRow, searchable }: { cols: Col<T>[]; rows: T[] | undefined; empty?: string; onRow?: (r: T) => void; searchable?: boolean }) {
+  const [q, setQ] = useState("");
   if (!rows) return <Loading />;
   if (!rows.length) return <Empty text={empty} />;
+  // A search box appears by itself on longer lists; pages with their own search pass searchable={false}.
+  const showSearch = searchable ?? rows.length >= 8;
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? rows.filter((r) => { try { return JSON.stringify(r).toLowerCase().includes(needle); } catch { return true; } }) : rows;
   return (
+    <div className="space-y-3">
+    {showSearch && <div className="max-w-xs"><Input placeholder="Search this list…" value={q} onChange={(e) => setQ(e.target.value)} /></div>}
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full text-sm">
         <thead className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
           <tr>{cols.map((c, i) => <th key={i} className={`px-5 py-3 font-medium whitespace-nowrap ${c.className || ""}`}>{c.header}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {rows.map((r, i) => (
+          {shown.map((r, i) => (
             <tr key={i} className={`${onRow ? "cursor-pointer" : ""} hover:bg-slate-50/70 transition-colors`} onClick={() => onRow?.(r)}>
               {cols.map((c, j) => <td key={j} className={`px-5 py-3.5 align-middle text-slate-700 ${c.className || ""}`}>{c.cell(r)}</td>)}
             </tr>
           ))}
         </tbody>
       </table>
+      {!shown.length && <div className="p-8 text-center text-sm text-slate-400">No matches for “{q}”</div>}
+    </div>
     </div>
   );
 }
@@ -101,7 +110,7 @@ export function FormDialog({ open, onClose, title, children, onSubmit, submitLab
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className={`${wide ? "max-w-2xl" : "max-w-md"} max-h-[90vh] overflow-y-auto rounded-2xl p-7`}>
+      <DialogContent className={`${wide ? "max-w-2xl" : "max-w-md"} max-h-[90vh] overflow-y-auto rounded-2xl p-5 sm:p-7`}>
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">{children}</div>
         <DialogFooter>

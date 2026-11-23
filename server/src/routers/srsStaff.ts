@@ -59,9 +59,9 @@ export const srsStaffRouter = createRouter({
   }),
 
   /** All staff accounts (everyone except students), with their SRS profile. */
-  list: roleQuery("admin", "academic_head").input(z.object({ role: z.string().optional(), search: z.string().optional() }).optional()).query(async ({ input }) => {
+  list: roleQuery("admin", "academic_head").input(z.object({ role: z.string().optional(), search: z.string().optional(), includeStudents: z.boolean().optional() }).optional()).query(async ({ input }) => {
     const db = getDb();
-    const conds: any[] = [ne_student()];
+    const conds: any[] = input?.includeStudents ? [] : [ne_student()];
     if (input?.role) conds.push(eq(users.role, input.role === "counsellor" ? "sales_executive" : (input.role as any)));
     if (input?.search) conds.push(or(ilike(users.name, `%${input.search}%`), ilike(users.phone, `%${input.search}%`), ilike(users.username, `%${input.search}%`)));
     const rows = await db.select({ u: users, p: staffProfiles, se: salesExecutives.id }).from(users).leftJoin(staffProfiles, eq(staffProfiles.userId, users.id)).leftJoin(salesExecutives, eq(salesExecutives.userId, users.id)).where(and(...conds)).orderBy(users.role, users.name).limit(1000);

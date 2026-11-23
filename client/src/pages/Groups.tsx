@@ -26,7 +26,7 @@ export default function Groups() {
   return (
     <Page title="Group sessions" subtitle="One teacher, two or three students. Attendance and class credits are recorded separately for each student."
       actions={canManage ? <Button onClick={() => { f.reset(); setOpen(true); }}><Plus className="h-4 w-4 mr-1" />New group</Button> : undefined}>
-      <Table rows={q.data} empty="No group sessions yet"
+      <Table searchable={false} rows={q.data} empty="No group sessions yet"
         cols={[
           { header: "Group", cell: (g: any) => <div><div className="font-medium">{g.name}</div><div className="text-xs text-slate-500">{g.course} · {g.teacherName}</div></div> },
           { header: "Students", cell: (g: any) => g.students.map((s: any) => s.name).join(", ") },

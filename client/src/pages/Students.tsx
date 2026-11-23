@@ -19,7 +19,7 @@ export default function Students() {
   return (
     <Page title="Students" subtitle="Search by name, mobile or Student ID.">
       <div className="max-w-sm"><Input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-      <Table rows={q.data} empty="No students found" onRow={detail ? (r: any) => setSel(r.id) : undefined}
+      <Table searchable={false} rows={q.data} empty="No students found" onRow={detail ? (r: any) => setSel(r.id) : undefined}
         cols={[
           { header: "Student ID", cell: (r: any) => r.enrollment_id || "—" }, { header: "Name", cell: (r: any) => <span className="font-medium">{r.name}</span> }, { header: "Mobile", cell: (r: any) => r.phone },
           { header: "Course", cell: (r: any) => r.department || r.course || "—" }, { header: "Counsellor", cell: (r: any) => r.counsellor || "—" }, { header: "Teacher", cell: (r: any) => r.teacher || "—" },
@@ -32,7 +32,7 @@ export default function Students() {
         <Field label="Name"><Input value={f.v.name} onChange={(e) => f.set("name", e.target.value)} /></Field>
         <Field label="Mobile"><Input value={f.v.phone} onChange={(e) => f.set("phone", e.target.value)} /></Field>
         <Field label="Email"><Input value={f.v.email} onChange={(e) => f.set("email", e.target.value)} /></Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Course"><Pick value={f.v.department} onChange={(x) => f.set("department", x)} options={DEPT_OPTIONS} /></Field>
           <Field label="Session type"><Pick value={f.v.sessionType} onChange={(x) => f.set("sessionType", x)} options={[{ value: "individual", label: "Individual" }, { value: "group", label: "Group" }]} /></Field>
           <Field label="Preferred timing"><Input value={f.v.timing} onChange={(e) => f.set("timing", e.target.value)} /></Field>

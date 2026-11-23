@@ -52,9 +52,9 @@ export default function Demos() {
       <FormDialog open={open} onClose={() => setOpen(false)} title="Book a demo class" busy={create.isPending} submitLabel="Book demo"
         onSubmit={() => { const v = f.v; if (!v.studentName || !v.mobile || !v.course || !v.preferredDate || !v.preferredTime || !v.teacherId) return toast.error("Fill in all fields"); create.mutate({ ...v, course: v.course as any, teacherId: Number(v.teacherId), whatsapp: v.whatsapp || undefined }); }}>
         <Field label="Prospective student's name"><Input value={f.v.studentName} onChange={(e) => f.set("studentName", e.target.value)} /></Field>
-        <div className="grid grid-cols-2 gap-4"><Field label="Mobile"><Input value={f.v.mobile} onChange={(e) => f.set("mobile", e.target.value)} /></Field><Field label="WhatsApp"><Input value={f.v.whatsapp} onChange={(e) => f.set("whatsapp", e.target.value)} /></Field></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Mobile"><Input value={f.v.mobile} onChange={(e) => f.set("mobile", e.target.value)} /></Field><Field label="WhatsApp"><Input value={f.v.whatsapp} onChange={(e) => f.set("whatsapp", e.target.value)} /></Field></div>
         <Field label="Course requested"><Pick value={f.v.course} onChange={(x) => f.set("course", x)} options={DEPT_OPTIONS} /></Field>
-        <div className="grid grid-cols-2 gap-4"><Field label="Preferred date"><Input type="date" value={f.v.preferredDate} onChange={(e) => f.set("preferredDate", e.target.value)} /></Field><Field label="Preferred time"><Input type="time" value={f.v.preferredTime} onChange={(e) => f.set("preferredTime", e.target.value)} /></Field></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Preferred date"><Input type="date" value={f.v.preferredDate} onChange={(e) => f.set("preferredDate", e.target.value)} /></Field><Field label="Preferred time"><Input type="time" value={f.v.preferredTime} onChange={(e) => f.set("preferredTime", e.target.value)} /></Field></div>
         <Field label="Demo teacher"><Pick value={f.v.teacherId} onChange={(x) => f.set("teacherId", x)} options={(teachers.data || []).map((t: any) => ({ value: t.id, label: `${t.name}${t.department ? " · " + t.department : ""}` }))} /></Field>
       </FormDialog>
 

@@ -79,7 +79,7 @@ export default function StudentDetail({ id, onClose }: { id: number; onClose: ()
         <FormDialog open={dlg === "tt"} onClose={() => setDlg(null)} title="Set weekly timetable" busy={setTT.isPending}
           onSubmit={() => { if (!f.teacherId) return toast.error("Assign a teacher first"); setTT.mutate({ studentUserId: id, teacherId: Number(f.teacherId), weekdays: (f.days || []).map(Number), timeOfDay: f.time, durationMinutes: Number(f.duration) }); }}>
           <Field label="Days"><div className="flex flex-wrap gap-2">{DAYS.map((d, i) => { const on = (f.days || []).includes(String(i)); return <button type="button" key={d} onClick={() => sp("days", on ? f.days.filter((x: string) => x !== String(i)) : [...(f.days || []), String(i)])} className={`px-3 py-1 rounded-full border text-sm ${on ? "bg-[#1D2A44] text-white" : "bg-white"}`}>{d}</button>; })}</div></Field>
-          <div className="grid grid-cols-2 gap-4"><Field label="Time (IST)"><Input type="time" value={f.time || ""} onChange={(e) => sp("time", e.target.value)} /></Field><Field label="Duration (min)"><Input inputMode="numeric" value={f.duration || ""} onChange={(e) => sp("duration", e.target.value)} /></Field></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Time (IST)"><Input type="time" value={f.time || ""} onChange={(e) => sp("time", e.target.value)} /></Field><Field label="Duration (min)"><Input inputMode="numeric" value={f.duration || ""} onChange={(e) => sp("duration", e.target.value)} /></Field></div>
           <p className="text-xs text-slate-500">Classes are created automatically for the next days. A teacher cannot be double-booked.</p>
         </FormDialog>
         <FormDialog open={dlg === "hold"} onClose={() => setDlg(null)} title={o?.admissionStatus === "on_hold" ? "Resume student" : "Place student on hold"} busy={hold.isPending} onSubmit={() => hold.mutate({ studentUserId: id, hold: o.admissionStatus !== "on_hold", reason: f.reason })}>
@@ -87,7 +87,7 @@ export default function StudentDetail({ id, onClose }: { id: number; onClose: ()
         </FormDialog>
         <FormDialog open={dlg === "allocate"} onClose={() => setDlg(null)} title="Add or adjust classes" busy={allocate.isPending}
           onSubmit={() => allocate.mutate({ studentUserId: id, kind: f.kind, classes: Number(f.classes), durationMinutes: Number(f.duration), sessionType: f.sessionType, amount: f.amount ? Number(f.amount) : undefined, reason: f.reason || undefined, specialConditions: f.special || undefined })}>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Type"><Pick value={f.kind} onChange={(x) => sp("kind", x)} options={[{ value: "additional", label: "Additional purchase" }, { value: "adjustment", label: "Adjustment (+/−)" }]} /></Field>
             <Field label="Classes"><Input inputMode="numeric" value={f.classes || ""} onChange={(e) => sp("classes", e.target.value)} /></Field>
             <Field label="Duration (min)"><Input inputMode="numeric" value={f.duration || ""} onChange={(e) => sp("duration", e.target.value)} /></Field>
@@ -99,7 +99,7 @@ export default function StudentDetail({ id, onClose }: { id: number; onClose: ()
         </FormDialog>
         <FormDialog open={dlg === "extend"} onClose={() => setDlg(null)} title="Extend course validity" busy={extend.isPending}
           onSubmit={() => extend.mutate({ studentUserId: id, daysToAdd: Number(f.days), reactivateClasses: Number(f.reactivate || 0), reason: f.reason })}>
-          <div className="grid grid-cols-2 gap-4"><Field label="Days to add"><Input inputMode="numeric" value={f.days || ""} onChange={(e) => sp("days", e.target.value)} /></Field><Field label="Reactivate expired classes"><Input inputMode="numeric" value={f.reactivate || ""} onChange={(e) => sp("reactivate", e.target.value)} /></Field></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Days to add"><Input inputMode="numeric" value={f.days || ""} onChange={(e) => sp("days", e.target.value)} /></Field><Field label="Reactivate expired classes"><Input inputMode="numeric" value={f.reactivate || ""} onChange={(e) => sp("reactivate", e.target.value)} /></Field></div>
           <Field label="Reason *"><Textarea rows={2} value={f.reason || ""} onChange={(e) => sp("reason", e.target.value)} /></Field>
           <p className="text-xs text-slate-500">The original expiry date is kept; the revised date is recorded next to it.</p>
         </FormDialog>
