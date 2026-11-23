@@ -196,7 +196,7 @@ Done = 88%.
 | 8.4-03 | Rejoin within window = same logical session | ✅ | S | same logical session — new |
 | 8.4-04 | Timer accumulates **overlapping** time, not wall-clock | ✅ | S | overlapping time only — new |
 | 8.4-05 | Gap over 5 minutes closes the session as interrupted | ✅ | S | longer gap = new independent session — new |
-| 8.4-06 | Later session treated independently unless an admin approves an exception | ❌ | S W | no exception workflow |
+| 8.4-06 | Later session treated independently unless an admin approves an exception | ✅ | S W | admin "Class exception" on the student page counts a reviewed class (audit logged) |
 | 8.4-07 | Keep all connect/disconnect logs for audit | ✅ | S | |
 | 8.5-01 | **Google Meet fallback**: link entry, scheduled details | ✅ | S W A | Google Meet record form — new |
 | 8.5-02 | Manual start/end time, student and teacher attendance, duration, remarks, reason for Meet | ✅ | S W A | times, attendance, duration, remarks, reason — new |
@@ -255,7 +255,7 @@ Done = 88%.
 | 12.2-03 | Ordered by next scheduled class | ✅ | W A | sorted by next class — new |
 | 12.3-01 | Open student profile; view class history; see balance | 🟡 | W A | balance and history shown; full profile page not built |
 | 12.3-02 | Start class; join video | ✅ | W A | |
-| 12.3-03 | Mark attendance where permitted; add class remarks | ❌ | S W A | |
+| 12.3-03 | Mark attendance where permitted; add class remarks | ✅ | S W A | teacher Notes: class remarks + report student absent |
 | 12.3-04 | Report student absence; report technical problem | ✅ | S W A | Requests: report absence / technical problem — new |
 | 12.3-05 | Request rescheduling | ✅ | S W A | |
 | 12.3-06 | Teacher cannot change allocation, fees or own pay | ✅ | S | |
@@ -291,7 +291,7 @@ Done = 88%.
 | 14-04 | Course validity | ✅ | W A | days left — new |
 | 14-05 | Attendance history; previous class details | ✅ | W A | |
 | 14-06 | **Additional course purchase option** | 🟡 | S W A | via a request; online purchase not built |
-| 14-07 | Support / contact option | 🟡 | S W A | via Requests; no phone/chat contact card |
+| 14-07 | Support / contact option | ✅ | S W A | support phone/email card on the student home (set in Settings) |
 | 14-08 | Request: reschedule | ✅ | S W A | |
 | 14-09 | Request: temporary hold | ✅ | S W A | request type — new |
 | 14-10 | Request: teacher change; timing change; technical support | ✅ | S W A | request types — new |
@@ -348,7 +348,7 @@ Done = 88%.
 | 18-04 | Student notifications (9 types) | ✅ | S | registration, payment verified, teacher assigned, expiry, low balance — new |
 | 18-05 | Teacher notifications (7 types) | ✅ | S | assigned, scheduled, absent, remuneration updated — new |
 | 18-06 | Admin notifications (6 types) | ✅ | S | payment pending, assignment pending, expiry, missed classes, pending remuneration — new |
-| 18-07 | Retention/clean-up of old notifications | ❌ | S | 69,929 rows and growing |
+| 18-07 | Retention/clean-up of old notifications | ✅ | S | hourly job removes read notifications after 60 days and all after 180 |
 
 ### 19. Admin and super-admin controls
 
@@ -361,7 +361,7 @@ Done = 88%.
 | 19-05 | Configurable remuneration, demo remuneration, group rates | ✅ | S W | Pay rates + Settings — new |
 | 19-06 | Notification settings | ✅ | S W | email / WhatsApp switches — new |
 | 19-07 | Google Meet fallback setting | ✅ | S W | Settings switch (enforced) — new |
-| 19-08 | Video classroom settings | ❌ | S W | |
+| 19-08 | Video classroom settings | ✅ | S W | Settings: join muted / camera off |
 | 19.1-01 | **Audit log** for every important action (user, time, previous value, new value, reason) | ✅ | S W | single `audit_logs` with reason — new |
 
 ### 20. Access control and security
@@ -370,7 +370,7 @@ Done = 88%.
 |---|---|---|---|---|
 | 20-01 | Role-based access for the 8 roles | ✅ | S | all 8 roles — new |
 | 20-02 | Secure login | 🟡 | S | plain-text passwords kept on purpose by the owner for testing — remove before production |
-| 20-03 | **Password reset** | ❌ | S W A | no forgot-password flow |
+| 20-03 | **Password reset** | ✅ | S W A | Forgot password on the login page: 6-digit code by email/WhatsApp, 15 min |
 
 ### 21. Architecture and data entities
 
@@ -564,3 +564,8 @@ Delete the §D features and drop their tables; database documentation, user manu
 | 21. Architecture and data entities | 3 | 0 | 0 | 0 |
 | 22. The 21 business rules ("must not be changed") | 21 | 0 | 0 | 0 |
 | 23–24. Phases and deliverables | 7 | 4 | 1 | 0 |
+
+## Added after the first release
+- **Add student (one step)** on Students: personal details, enrolment, payment, class allocation and optional teacher, all recorded in the SRS records.
+- **Users** page lists every account (students and all staff) with role tabs and search.
+- Search on every long list, responsive dialogs, student can open the classroom at any time (SRS 7.1).

@@ -12,6 +12,10 @@ export default function Today() {
   const students = trpc.academic.myStudents.useQuery();
   const manual = trpc.lms.recordManualClass.useMutation({ onSuccess: (r) => { toast.success(`Recorded ${r.minutes} minutes`); setMeet(false); sch.refetch(); sum.refetch(); }, onError: (e) => toast.error(e.message) });
   const [meet, setMeet] = useState(false);
+  const [note, setNote] = useState<any | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const remark = trpc.lms.addRemark.useMutation({ onSuccess: () => { toast.success("Remark saved"); setNote(null); sch.refetch(); }, onError: (e) => toast.error(e.message) });
+  const absent = trpc.lms.reportAbsence.useMutation({ onSuccess: () => { toast.success("Absence reported to the academic head"); setNote(null); sch.refetch(); sum.refetch(); }, onError: (e) => toast.error(e.message) });
   const f = useForm({ studentId: "", link: "", date: new Date().toISOString().slice(0, 10), start: "", end: "", teacherPresent: "yes", studentPresent: "yes", reason: "", remarks: "" });
   const s = sum.data;
   const s1 = sch.data;
@@ -19,7 +23,7 @@ export default function Today() {
     <div className={`flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 ${tone === "now" ? "ring-2 ring-[#C8102E]" : ""} ${tone === "late" ? "border-red-300" : ""}`}>
       <div><div className="font-medium">{c.studentName}</div><div className="text-xs text-slate-500">{fmtTime(c.scheduledAt)} · {c.sessionLength} min{c.isManual ? " · via Google Meet" : ""}</div></div>
       <div className="flex gap-2 items-center">
-        {tone === "late" && <Chip value="absent" label="Overdue" />}{tone === "done" && <Chip value="completed" />}
+        <Button size="sm" variant="outline" onClick={() => { setNote(c); setNoteText(c.remarks || ""); }}>Notes</Button>{tone === "late" && <Chip value="absent" label="Overdue" />}{tone === "done" && <Chip value="completed" />}
         {(tone === "now" || tone === "up" || tone === "late") && <Button size="sm" disabled={rm.busy} onClick={() => rm.open({ id: c.id, title: c.title, scheduledAt: c.scheduledAt })}>{c.status === "ongoing" ? "Rejoin" : "Start class"}</Button>}
       </div>
     </div>
@@ -42,6 +46,14 @@ export default function Today() {
           <Group title="Completed" rows={s1.completed} tone="done" />
           <Group title="Students on hold" rows={s1.hold} tone="hold" />
         </>}
+      <FormDialog open={!!note} onClose={() => setNote(null)} title={`Class notes — ${note?.studentName || ""}`} submitLabel="Save remark" busy={remark.isPending}
+        onSubmit={() => noteText.trim() ? remark.mutate({ sessionId: note.id, remarks: noteText.trim() }) : toast.error("Write a remark first")}>
+        <Field label="Remarks about this class"><Textarea rows={3} value={noteText} onChange={(e) => setNoteText(e.target.value)} /></Field>
+        <div className="rounded-lg border border-slate-200 p-3 text-sm space-y-2">
+          <div className="text-slate-600">Student did not attend? Report it so it is recorded as absent (no class credit is used).</div>
+          <Button size="sm" variant="outline" disabled={absent.isPending} onClick={() => absent.mutate({ sessionId: note.id, remarks: noteText.trim() || undefined })}>Report student absent</Button>
+        </div>
+      </FormDialog>
       {rm.element}
       <FormDialog wide open={meet} onClose={() => setMeet(false)} title="Record a class held on Google Meet" busy={manual.isPending}
         onSubmit={() => { const v = f.v; if (!v.studentId || !v.start || !v.end || !v.reason) return toast.error("Fill in the student, times and reason"); manual.mutate({ studentId: Number(v.studentId), meetLink: v.link || undefined, startedAt: new Date(`${v.date}T${v.start}:00`), endedAt: new Date(`${v.date}T${v.end}:00`), teacherPresent: v.teacherPresent === "yes", studentPresent: v.studentPresent === "yes", reason: v.reason, remarks: v.remarks || undefined }); }}>

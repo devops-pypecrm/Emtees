@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Login() {
   const router = useNavigate();
@@ -14,6 +15,10 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [reset, setReset] = useState(false);
+  const [rid, setRid] = useState(""); const [code, setCode] = useState(""); const [np, setNp] = useState(""); const [sent, setSent] = useState(false);
+  const forgot = trpc.auth.forgotPassword.useMutation({ onSuccess: (r) => { setSent(true); toast.success(r.message, { duration: 7000 }); }, onError: (e) => toast.error(e.message) });
+  const doReset = trpc.auth.resetPassword.useMutation({ onSuccess: () => { toast.success("Password changed. You can sign in now."); setReset(false); setSent(false); setCode(""); setNp(""); }, onError: (e) => toast.error(e.message) });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -73,9 +78,27 @@ export default function Login() {
               {loginMutation.isPending ? "Logging in..." : "Login"}
             </Button>
           </form>
+          <button type="button" onClick={() => { setReset(true); setRid(username); }} className="mt-4 w-full text-center text-sm text-[#1D2A44] hover:underline">Forgot password?</button>
         </CardContent>
       </Card>
+      <Dialog open={reset} onOpenChange={setReset}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Reset password</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Username, email or mobile number" value={rid} onChange={(e) => setRid(e.target.value)} />
+            {!sent ? (
+              <Button className="w-full" disabled={forgot.isPending || rid.trim().length < 3} onClick={() => forgot.mutate({ identifier: rid })}>Send reset code</Button>
+            ) : (
+              <>
+                <Input placeholder="6-digit code" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+                <Input type="password" placeholder="New password (min 6 characters)" value={np} onChange={(e) => setNp(e.target.value)} />
+                <Button className="w-full" disabled={doReset.isPending || code.length !== 6 || np.length < 6} onClick={() => doReset.mutate({ identifier: rid, code, newPassword: np })}>Change password</Button>
+              </>
+            )}
+            <p className="text-xs text-gray-500">No email on your account? Ask an administrator to reset it for you.</p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

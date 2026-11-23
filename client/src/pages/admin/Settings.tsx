@@ -15,7 +15,8 @@ export default function SettingsPage() {
     ["Class rules", ["class_duration_threshold", "default_class_duration", "reconnection_window_minutes", "course_validity_days", "absent_consecutive_threshold"]],
     ["Default teacher pay (rules in “Pay rates” override these)", ["rate_regular_30min", "rate_demo", "rate_demo_bonus"]],
     ["Alerts", ["expiry_alert_days", "low_balance_threshold"]],
-    ["Classroom & notifications", ["meet_fallback_enabled", "notify_email", "notify_whatsapp"]],
+    ["Classroom & notifications", ["meet_fallback_enabled", "video_start_muted", "video_start_camera_off", "notify_email", "notify_whatsapp"]],
+    ["Student support contact", ["support_phone", "support_email"]],
   ];
   const by = Object.fromEntries(q.data.map((x: any) => [x.key, x]));
   return (
@@ -28,7 +29,7 @@ export default function SettingsPage() {
               <Field key={k} label={by[k].label}>
                 {by[k].type === "toggle"
                   ? <Pick value={v[k]} onChange={(x) => setV({ ...v, [k]: x })} options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]} />
-                  : <Input inputMode="numeric" value={v[k] ?? ""} onChange={(e) => setV({ ...v, [k]: e.target.value })} />}
+                  : <Input inputMode={by[k].type === "number" ? "numeric" : undefined} value={v[k] ?? ""} onChange={(e) => setV({ ...v, [k]: e.target.value })} />}
               </Field>
             ))}
           </div></Card>

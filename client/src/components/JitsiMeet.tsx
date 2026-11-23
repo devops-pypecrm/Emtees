@@ -43,6 +43,7 @@ export default function JitsiMeet({
   const heartbeatCountRef = useRef(0);
   const handleLeaveRef = useRef<((eventName: string) => Promise<void>) | null>(null);
 
+  const cfg = trpc.staff.publicConfig.useQuery(undefined, { staleTime: 60000 }).data;
   const trackHeartbeat = trpc.class.trackOneToOneHeartbeat.useMutation();
   // Tell the server when this user actually enters / leaves the call (feeds attendance + reports)
   const reportPresence = trpc.class.reportPresence.useMutation();
@@ -399,8 +400,8 @@ export default function JitsiMeet({
               email: email || "",
             }}
             configOverwrite={{
-              startWithAudioMuted: false,
-              startWithVideoMuted: false,
+              startWithAudioMuted: !!cfg?.videoStartMuted,
+              startWithVideoMuted: !!cfg?.videoStartCameraOff,
               // Force Jitsi to stay inside the browser on mobile, don't ask to download native app
               disableDeepLinking: true,
               // Prevent Jitsi from auto-hiding the PC user's self-view camera when there are only 2 people

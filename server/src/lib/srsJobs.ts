@@ -22,6 +22,9 @@ async function once(db: any, userId: number, type: string, subject: string, mess
  *  - classes are written off after validity only when "auto_expire_classes" is switched on in Settings (never deleted)
  */
 export async function runSrsJobs(db: any) {
+  // SRS 18: keep the notification table small - read ones after 60 days, anything after 180 days (never touches academic or financial records).
+  await db.execute(sql`delete from notifications where created_at < now() - interval '180 days' or (is_read = true and created_at < now() - interval '60 days')`).catch((e: any) => console.error("[notifications cleanup]", e?.message));
+
   const warn = await getNumberSetting(db, "expiry_alert_days");
   const low = await getNumberSetting(db, "low_balance_threshold");
   const autoExpire = (await getStringSetting(db, "auto_expire_classes", "no")) === "yes";

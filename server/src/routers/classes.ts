@@ -1572,8 +1572,9 @@ export const classRouter = createRouter({
       }
 
       if (isStudent) {
-        if (session.status !== "ongoing") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Class has not started yet. Please wait for the teacher to start the session." });
+        // SRS 7.1: a booked time is not a restriction - the student may open the classroom at any time until the class is finished or cancelled.
+        if (session.status === "completed" || session.status === "cancelled") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "This class has already finished." });
         }
         await db.update(oneToOneSessions)
           .set({ studentAttendance: "present" })

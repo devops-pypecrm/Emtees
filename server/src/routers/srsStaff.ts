@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import { createRouter, roleQuery } from "../middleware";
+import { createRouter, roleQuery, authedQuery } from "../middleware";
 import { getDb } from "../queries/connection";
 import { users, salesExecutives, systemSettings, profiles } from "@db/schema";
 import { staffProfiles, admissions } from "@db/srs-schema";
@@ -26,12 +26,24 @@ export const CONFIG = {
   meet_fallback_enabled: { label: "Allow Google Meet fallback (manual class records)", def: "yes", type: "toggle" },
   notify_email: { label: "Send email notifications", def: "yes", type: "toggle" },
   notify_whatsapp: { label: "Send WhatsApp notifications (needs API access)", def: "no", type: "toggle" },
+  video_start_muted: { label: "Video classroom: join with microphone muted", def: "no", type: "toggle" },
+  video_start_camera_off: { label: "Video classroom: join with camera off", def: "no", type: "toggle" },
+  support_phone: { label: "Support phone / WhatsApp number shown to students", def: "", type: "text" },
+  support_email: { label: "Support email shown to students", def: "", type: "text" },
 } as const;
 
 const ROLES = ["teacher", "accountant", "academic_head", "admin", "counsellor"] as const;
 const deptLabel = (d: string[]) => d.map((x) => (x === "hindi" ? "Spoken Hindi" : "Spoken English")).join(", ");
 
 export const srsStaffRouter = createRouter({
+  /** Values every signed-in user may read (classroom behaviour and the support contact card). */
+  publicConfig: authedQuery.query(async () => {
+    const db = getDb();
+    const rows = await db.select().from(systemSettings);
+    const m = new Map(rows.map((r: any) => [r.key, r.value]));
+    const g = (k: keyof typeof CONFIG) => m.get(k) ?? CONFIG[k].def;
+    return { videoStartMuted: g("video_start_muted") === "yes", videoStartCameraOff: g("video_start_camera_off") === "yes", supportPhone: g("support_phone") as string, supportEmail: g("support_email") as string };
+  }),
   configGet: roleQuery("admin").query(async () => {
     const db = getDb();
     const rows = await db.select().from(systemSettings);

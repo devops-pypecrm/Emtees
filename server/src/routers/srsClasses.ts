@@ -122,6 +122,59 @@ export const srsClassesRouter = createRouter({
   }),
 
 
+  // ---------------- teacher class controls (SRS 12.3) ----------------
+  /** Teacher adds remarks to their own class; admin/head can too. Never touches credit or pay. */
+  addRemark: roleQuery("teacher", ...heads).input(z.object({ sessionId: z.number(), remarks: z.string().trim().min(1) })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const [sx] = await db.select().from(oneToOneSessions).where(eq(oneToOneSessions.id, input.sessionId));
+    if (!sx) throw new TRPCError({ code: "NOT_FOUND", message: "Class not found" });
+    if (ctx.user.role === "teacher" && sx.teacherId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "This is not your class" });
+    await db.update(oneToOneSessions).set({ remarks: input.remarks } as any).where(eq(oneToOneSessions.id, input.sessionId));
+    await audit(db, ctx.user, "class_remark_added", "one_to_one_session", input.sessionId, { remarks: sx.remarks }, { remarks: input.remarks });
+    return { ok: true };
+  }),
+  /** Teacher reports the student did not attend. Recorded as absent (no credit) and the head is told. A present student cannot be flipped here. */
+  reportAbsence: roleQuery("teacher", ...heads).input(z.object({ sessionId: z.number(), remarks: z.string().optional() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const [sx] = await db.select().from(oneToOneSessions).where(eq(oneToOneSessions.id, input.sessionId));
+    if (!sx) throw new TRPCError({ code: "NOT_FOUND", message: "Class not found" });
+    if (ctx.user.role === "teacher" && sx.teacherId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "This is not your class" });
+    const [cur] = await db.select().from(attendance).where(and(eq(attendance.oneToOneSessionId, input.sessionId), eq(attendance.studentId, sx.studentId)));
+    if (cur && cur.status === "present") throw new TRPCError({ code: "BAD_REQUEST", message: "The student already has a counted class here. Ask an administrator to correct it." });
+    if (cur) await db.update(attendance).set({ status: "absent", remarks: input.remarks || "Reported absent by teacher", updatedBy: ctx.user.id } as any).where(eq(attendance.id, cur.id));
+    else await db.insert(attendance).values({ oneToOneSessionId: input.sessionId, studentId: sx.studentId, teacherId: sx.teacherId, status: "absent", sessionType: "one_to_one",
+      attendanceDate: sx.scheduledAt, remarks: input.remarks || "Reported absent by teacher", createdBy: ctx.user.id } as any);
+    await audit(db, ctx.user, "student_absence_reported", "one_to_one_session", input.sessionId, { status: cur?.status ?? null }, { status: "absent" }, input.remarks);
+    const st = await db.query.users.findFirst({ where: eq(users.id, sx.studentId) });
+    const heads2 = await db.select({ id: users.id }).from(users).where(inArray(users.role, ["admin", "academic_head"]));
+    for (const h of heads2) await NotificationService.dispatch({ userId: h.id, subject: "Student absent", message: `${st?.name || "A student"} was absent for a class on ${new Date(sx.scheduledAt).toLocaleDateString("en-IN")}.`, type: "student_absent", channels: ["in_app"] }).catch(() => {});
+    return { ok: true };
+  }),
+  /** Recent classes of a student with minutes, for admin review and exceptions. */
+  studentSessions: roleQuery(...heads).input(z.object({ studentUserId: z.number() })).query(async ({ input }) => {
+    const db = getDb();
+    const rows = await db.select().from(oneToOneSessions).where(eq(oneToOneSessions.studentId, input.studentUserId)).orderBy(desc(oneToOneSessions.scheduledAt)).limit(30);
+    return rows.map((r: any) => ({ id: r.id, scheduledAt: r.scheduledAt, status: r.status, minutes: r.actualDuration || 0, isManual: r.isManual, remarks: r.remarks, teacherId: r.teacherId }));
+  }),
+  /**
+   * SRS 8.4: a later session is normally independent. An administrator may review and approve an exception: the class is then
+   * counted as one completed class of the stated length through the same engine (credit and pay follow the normal rules).
+   */
+  approveException: roleQuery("admin").input(z.object({ sessionId: z.number(), minutes: z.number().int().min(1).max(240), reason: z.string().trim().min(5) })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const [sx] = await db.select().from(oneToOneSessions).where(eq(oneToOneSessions.id, input.sessionId));
+    if (!sx) throw new TRPCError({ code: "NOT_FOUND", message: "Class not found" });
+    const start = sx.startedAt || sx.scheduledAt;
+    const end = new Date(new Date(start).getTime() + input.minutes * 60000);
+    const mk = (uid: number, type: string, t: Date) => ({ userId: uid, eventType: type, timestamp: t, oneToOneSessionId: input.sessionId, source: "exception" } as any);
+    const evs = [mk(sx.teacherId, "join", new Date(start)), mk(sx.teacherId, "leave", end), mk(sx.studentId, "join", new Date(start)), mk(sx.studentId, "leave", end)];
+    await db.insert(attendanceEvents).values(evs).catch(async () => { await db.insert(attendanceEvents).values(evs.map((e) => { const { source, ...rest } = e; return rest; })); });
+    await db.update(oneToOneSessions).set({ startedAt: new Date(start), endedAt: end, actualDuration: input.minutes, status: "completed", completedAt: end, remarks: `[Exception approved] ${input.reason}` } as any).where(eq(oneToOneSessions.id, input.sessionId));
+    await evaluateClassCompletion(undefined, input.sessionId);
+    await audit(db, ctx.user, "class_exception_approved", "one_to_one_session", input.sessionId, { status: sx.status, minutes: sx.actualDuration }, { minutes: input.minutes }, input.reason);
+    return { ok: true };
+  }),
+
   // ---------------- group sessions: one teacher, 2-3 students (SRS 9) ----------------
   createGroup: roleQuery(...heads).input(z.object({
     name: z.string().trim().min(2), department: z.enum(["english", "hindi"]), teacherId: z.number(), studentIds: z.array(z.number()).min(2).max(3),

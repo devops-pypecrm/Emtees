@@ -6,7 +6,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { createRouter, publicQuery, roleQuery } from "../middleware";
 import { getDb } from "../queries/connection";
 import { users, profiles, salesExecutives, payments } from "@db/schema";
-import { admissions, admissionStatusHistory, courseAllocations, ADMISSION_STATUSES } from "@db/srs-schema";
+import { admissions, admissionStatusHistory, courseAllocations, teacherAssignments, ADMISSION_STATUSES } from "@db/srs-schema";
 import { audit } from "../lib/audit";
 import { generateNextEnrollmentId } from "../lib/studentIdGenerator";
 import { updateStudentSessionBalances } from "../lib/sessionHelper";
@@ -136,6 +136,91 @@ export const srsAdmissionsRouter = createRouter({
         message: `${input.fullName} (${mobile}) registered. Payment of ${input.amountPaid} is awaiting verification.`, type: "admission", channels: ["in_app"] }).catch(() => {});
     }
     return { ok: true, flaggedDuplicate: !!dup };
+  }),
+
+  /**
+   * Admin: enrol a student directly in ONE step (the original "Add student" flow): personal details, course, counsellor,
+   * payment, class allocation and optionally the teacher. Everything still goes through the SRS records, so the student is
+   * traceable from counsellor and payment through allocation to teacher, with a full audit trail and status history.
+   */
+  addStudent: roleQuery("admin").input(z.object({
+    name: z.string().trim().min(2), mobile: z.string().trim().min(7), whatsapp: z.string().trim().optional(),
+    email: z.string().trim().email().optional().or(z.literal("")),
+    gender: z.string().optional(), dateOfBirth: z.string().optional(),
+    place: z.string().trim().optional(), state: z.string().trim().optional(), country: z.string().trim().optional(),
+    address: z.string().trim().optional(), postalCode: z.string().trim().optional(),
+    parentName: z.string().trim().optional(), parentPhone: z.string().trim().optional(),
+    department: z.enum(["english", "hindi"]), sessionType: z.enum(["individual", "group"]), preferredTiming: z.string().trim().min(1),
+    counsellorId: z.number(),
+    enrollmentId: z.string().trim().optional(), username: z.string().trim().optional(), password: z.string().trim().min(6).optional(),
+    amountPaid: z.number().nonnegative(), paymentDate: z.string().optional(), paymentMethod: z.string().optional(), transactionRef: z.string().optional(), receiptUrl: z.string().optional(),
+    classes: z.number().int().min(0).default(0), durationMinutes: z.number().int().min(10).max(240).default(30), specialConditions: z.string().optional(),
+    validityEndDate: z.string().optional(), teacherId: z.number().optional(),
+  })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const mobile = digits(input.mobile);
+    const dup = await db.query.users.findFirst({ where: sql`regexp_replace(coalesce(${users.phone},''), '[^0-9]', '', 'g') = ${mobile} or ${users.phoneNumber} = ${mobile}` });
+    if (dup) throw new TRPCError({ code: "CONFLICT", message: `This mobile number already belongs to ${dup.name}. Open that student instead of creating a second record.` });
+    const [counsellor] = await db.select().from(salesExecutives).where(eq(salesExecutives.id, input.counsellorId));
+    if (!counsellor) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose the counsellor who enrolled this student" });
+    let enrollmentId = input.enrollmentId ? input.enrollmentId.toUpperCase() : await generateNextEnrollmentId();
+    if (await db.query.profiles.findFirst({ where: eq(profiles.enrollmentId, enrollmentId) })) throw new TRPCError({ code: "CONFLICT", message: `Student ID ${enrollmentId} is already in use` });
+    const username = input.username || enrollmentId;
+    if (await db.query.users.findFirst({ where: eq(users.username, username) })) throw new TRPCError({ code: "CONFLICT", message: `Username ${username} is already taken` });
+    if (input.teacherId && !input.classes) throw new TRPCError({ code: "BAD_REQUEST", message: "Allocate classes before assigning a teacher" });
+    const pwd = input.password || String(Math.floor(100000 + Math.random() * 900000));
+    const dept = input.department === "hindi" ? "Spoken Hindi" : "Spoken English";
+    const address = input.address || [input.place, input.state, input.country].filter(Boolean).join(", ");
+
+    const [u] = await db.insert(users).values({
+      unionId: `student-${enrollmentId}`, username, password: await bcrypt.hash(pwd, 10), rawPassword: pwd,
+      name: input.name, email: input.email || null, phone: mobile, role: "student", status: "active",
+      gender: input.gender || null, dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null, address: address || null, postalCode: input.postalCode || null,
+      salesExecutiveId: input.counsellorId, registrationSource: "admin_direct", mustChangePassword: false, department: dept,
+    } as any).returning();
+    await db.insert(profiles).values({
+      userId: u.id, enrollmentId, course: dept, department: dept, sessionType: input.sessionType === "group" ? "group" : "one_to_one", preferredClassTime: input.preferredTiming,
+      oneOnOneEnabled: input.sessionType === "individual", groupSessionEnabled: input.sessionType === "group",
+      gender: input.gender || null, dob: input.dateOfBirth ? new Date(input.dateOfBirth) : null, address: address || null, postalCode: input.postalCode || null,
+      parentName: input.parentName || null, parentPhone: input.parentPhone || null,
+      validityEndDate: input.validityEndDate ? new Date(input.validityEndDate) : null,
+    } as any);
+    const paid = input.amountPaid > 0;
+    const [a] = await db.insert(admissions).values({
+      token: crypto.randomBytes(12).toString("hex"), counsellorId: input.counsellorId, studentUserId: u.id, status: "link_generated",
+      department: input.department, sessionType: input.sessionType, preferredTiming: input.preferredTiming, fullName: input.name, mobile,
+      whatsapp: digits(input.whatsapp || "") || mobile, email: input.email || null, gender: input.gender || null, dateOfBirth: input.dateOfBirth || null,
+      place: input.place || null, state: input.state || null, country: input.country || null,
+      amountPaid: String(input.amountPaid), paymentDate: input.paymentDate || null, paymentMethod: input.paymentMethod || null,
+      transactionRef: input.transactionRef || null, receiptUrl: input.receiptUrl || null,
+    } as any).returning();
+    const by = ctx.user.id;
+    await setAdmissionStatus(db, a.id, "registration_completed", by, "Added directly by admin");
+    await setAdmissionStatus(db, a.id, "payment_pending_verification", by);
+    await db.update(admissions).set({ verifiedAmount: String(input.amountPaid), verifiedBy: by, verifiedAt: new Date() }).where(eq(admissions.id, a.id));
+    if (paid) await db.insert(payments).values({ studentId: u.id, amount: String(input.amountPaid), type: "tuition", status: "paid", paidAt: input.paymentDate ? new Date(input.paymentDate) : new Date(),
+      transactionId: input.transactionRef || null, notes: `Admission #${a.id} added by admin (${input.paymentMethod || "payment"})` } as any);
+    await setAdmissionStatus(db, a.id, "payment_verified", by, "Verified by admin at entry");
+    await setAdmissionStatus(db, a.id, "awaiting_assignment", by);
+    await audit(db, ctx.user, "student_added_by_admin", "student", u.id, null, { enrollmentId, counsellorId: input.counsellorId, amountPaid: input.amountPaid, classes: input.classes });
+
+    if (input.classes > 0) {
+      await db.insert(courseAllocations).values({ studentUserId: u.id, admissionId: a.id, kind: "initial", classes: input.classes, durationMinutes: input.durationMinutes,
+        sessionType: input.sessionType, amount: String(input.amountPaid), specialConditions: input.specialConditions || null, createdBy: by } as any);
+      const col = input.sessionType === "group" ? { allocatedGroupSessions: input.classes } : { allocatedOneToOneSessions: input.classes };
+      await db.update(profiles).set({ ...col, totalAllocatedSessions: input.classes } as any).where(eq(profiles.userId, u.id));
+      await audit(db, ctx.user, "class_allocation_initial", "student", u.id, null, { classes: input.classes, duration: input.durationMinutes, sessionType: input.sessionType });
+      await updateStudentSessionBalances(db, u.id).catch(() => {});
+    }
+    if (input.teacherId) {
+      await db.insert(teacherAssignments).values({ studentUserId: u.id, teacherId: input.teacherId, preferredTiming: input.preferredTiming, durationMinutes: input.durationMinutes,
+        classesAtStart: input.classes, reason: "initial", assignedBy: by } as any);
+      await setAdmissionStatus(db, a.id, "teacher_assigned", by);
+      await audit(db, ctx.user, "teacher_assigned", "student", u.id, null, { teacherId: input.teacherId });
+      await NotificationService.dispatch({ userId: input.teacherId, subject: "New student assigned", message: `${input.name} has been assigned to you.`, type: "teacher_assigned", channels: ["in_app"] }).catch(() => {});
+    }
+    await NotificationService.dispatch({ userId: u.id, subject: "Welcome to EMTEES Academy", message: `Your login: ${username} / ${pwd}. Student ID ${enrollmentId}.`, type: "registration", channels: ["in_app", "email"] }).catch(() => {});
+    return { id: u.id, admissionId: a.id, enrollmentId, username, password: pwd };
   }),
 
   /** Accountant: approve (with the verified amount) or reject. Verification is mandatory before assignment (SRS 5.1). */

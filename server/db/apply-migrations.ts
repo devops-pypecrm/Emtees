@@ -411,6 +411,19 @@ export async function applyMigrations() {
       SELECT a.id, a.status, 'Imported from existing student record' FROM admissions a
       WHERE a.payment_method = 'imported' AND NOT EXISTS (SELECT 1 FROM admission_status_history h WHERE h.admission_id = a.id);`);
     // Testing: minimum qualifying minutes 1 -> 5 (one time only; later changes in Settings are never overwritten).
+    console.log("Creating password_resets table...");
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "password_resets" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "user_id" bigint NOT NULL,
+        "code_hash" varchar(255) NOT NULL,
+        "expires_at" timestamp NOT NULL,
+        "used_at" timestamp,
+        "attempts" integer DEFAULT 0 NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `);
+
     const m5 = await client.query(`INSERT INTO system_settings (key, value) VALUES ('migration_min5_applied','yes') ON CONFLICT (key) DO NOTHING RETURNING key`);
     if (m5.rowCount) {
       await client.query(`INSERT INTO system_settings (key, value) VALUES ('class_duration_threshold','5')

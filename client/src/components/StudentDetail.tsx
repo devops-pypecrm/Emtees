@@ -28,7 +28,9 @@ export default function StudentDetail({ id, onClose }: { id: number; onClose: ()
   const allocate = trpc.admissions.allocate.useMutation({ onSuccess: ok("Classes added"), onError: bad });
   const hold = trpc.academic.holdStudent.useMutation({ onSuccess: ok("Updated"), onError: bad });
   const setTT = trpc.academic.setTimetable.useMutation({ onSuccess: ok("Timetable saved"), onError: bad });
-  const [dlg, setDlg] = useState<null | "teacher" | "extend" | "allocate" | "hold" | "tt">(null);
+  const [dlg, setDlg] = useState<null | "teacher" | "extend" | "allocate" | "hold" | "tt" | "exc">(null);
+  const sess = trpc.lms.studentSessions.useQuery({ studentUserId: id }, { enabled: dlg === "exc" });
+  const exc = trpc.lms.approveException.useMutation({ onSuccess: ok("Exception approved — class counted"), onError: bad });
   const [f, setF] = useState<any>({});
   const sp = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }));
   const o: any = ov.data;
@@ -57,6 +59,7 @@ export default function StudentDetail({ id, onClose }: { id: number; onClose: ()
                 <Button size="sm" variant="outline" onClick={() => { setF({ reason: "" }); setDlg("hold"); }}>{o.admissionStatus === "on_hold" ? "Resume student" : "Place on hold"}</Button>
                 {isAdmin && <Button size="sm" variant="outline" onClick={() => { setF({ kind: "additional", classes: "", duration: "30", sessionType: o.sessionType === "group" ? "group" : "individual", amount: "", reason: "", special: "" }); setDlg("allocate"); }}>Add / adjust classes</Button>}
                 {isAdmin && <Button size="sm" variant="outline" onClick={() => { setF({ days: "", reactivate: "0", reason: "" }); setDlg("extend"); }}>Extend validity</Button>}
+                {isAdmin && <Button size="sm" variant="outline" onClick={() => { setF({ sessionId: "", minutes: "30", reason: "" }); setDlg("exc"); }}>Class exception</Button>}
               </div>
             )}
 
@@ -69,6 +72,13 @@ export default function StudentDetail({ id, onClose }: { id: number; onClose: ()
           </div>
         )}
 
+        <FormDialog open={dlg === "exc"} onClose={() => setDlg(null)} title="Approve a class exception" submitLabel="Count this class" busy={exc.isPending}
+          onSubmit={() => { if (!f.sessionId || !Number(f.minutes) || (f.reason || "").trim().length < 5) return toast.error("Choose the class, minutes and a reason"); exc.mutate({ sessionId: Number(f.sessionId), minutes: Number(f.minutes), reason: f.reason }); }}>
+          <p className="text-sm text-slate-500">Use this when a class was split into separate sessions or interrupted and you have reviewed it. It is counted as one completed class and recorded in the audit log.</p>
+          <Field label="Class"><Pick value={f.sessionId} onChange={(x) => sp("sessionId", x)} options={(sess.data || []).map((x: any) => ({ value: x.id, label: `${fmtDT(x.scheduledAt)} · ${x.status} · ${x.minutes} min` }))} /></Field>
+          <Field label="Minutes to count"><Input inputMode="numeric" value={f.minutes || ""} onChange={(e) => sp("minutes", e.target.value)} /></Field>
+          <Field label="Reason for the exception *"><Input value={f.reason || ""} onChange={(e) => sp("reason", e.target.value)} /></Field>
+        </FormDialog>
         <FormDialog open={dlg === "teacher"} onClose={() => setDlg(null)} title={o?.teacher ? "Change teacher" : "Assign teacher"} busy={change.isPending || assign.isPending}
           onSubmit={() => { if (!f.teacherId) return toast.error("Choose a teacher"); o.teacher ? change.mutate({ studentUserId: id, newTeacherId: Number(f.teacherId), reason: f.reason, reasonNote: f.note || undefined }) : assign.mutate({ studentUserId: id, teacherId: Number(f.teacherId), admissionId: o.admissionId || undefined }); }}>
           <Field label="Teacher (availability shown)"><Pick value={f.teacherId} onChange={(x) => sp("teacherId", x)} options={(teachers.data || []).filter((t: any) => t.id !== o?.teacher?.id).map((t: any) => ({ value: t.id, label: `${t.name} — ${t.students} students${t.availability ? ` — ${t.availability.startTime}-${t.availability.endTime}, ${t.availability.workingDays.split(",").map((d: string) => DAYS[Number(d)]).join("/")}` : ""}` }))} /></Field>
