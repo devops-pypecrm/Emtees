@@ -30,10 +30,16 @@ export function getDb() {
 
     const pool = new pg.Pool({
       connectionString: env.databaseUrl,
-      connectionTimeoutMillis: 5000, // 5 seconds connection timeout
-      query_timeout: 5000,           // 5 seconds query timeout
+      max: 10,
+      connectionTimeoutMillis: 10000, // fail fast on a dead network path
+      query_timeout: 30000,
+      idleTimeoutMillis: 20000,       // drop idle connections before RDS / the network silently kills them
+      keepAlive: true,                // TCP keep-alive so half-open connections are detected
+      keepAliveInitialDelayMillis: 10000,
       ssl: sslConfig,
     });
+    // A dropped idle connection must not crash or poison the pool; pg discards it and opens a new one.
+    pool.on("error", (e) => console.error("[pg pool] idle client error:", e.message));
     instance = drizzle(pool, { schema: fullSchema });
   }
   return instance;

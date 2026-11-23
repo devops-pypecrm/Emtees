@@ -132,9 +132,9 @@ export const srsStaffRouter = createRouter({
   /** Admin student-account management (SRS 19): search, edit basics, reset password. Passwords stay visible by design (test phase). */
   students: roleQuery("admin", "academic_head", "accountant", "sales_executive").input(z.object({ search: z.string().optional(), limit: z.number().max(300).default(100) }).optional()).query(async ({ ctx, input }) => {
     const db = getDb();
-    const conds: any[] = [eq(users.role, "student")];
-    if (input?.search) conds.push(sql`(${users.name} ilike ${"%" + input.search + "%"} or ${users.phone} ilike ${"%" + input.search + "%"} or exists (select 1 from profiles p where p.user_id=${users.id} and p.enrollment_id ilike ${"%" + input.search + "%"}))`);
-    if (ctx.user.role === "sales_executive") conds.push(sql`${users.salesExecutiveId} = (select id from sales_executives where user_id=${ctx.user.id})`);
+    const conds: any[] = [sql`u.role = 'student'`];
+    if (input?.search) { const like = "%" + input.search + "%"; conds.push(sql`(u.name ilike ${like} or u.phone ilike ${like} or exists (select 1 from profiles p2 where p2.user_id=u.id and p2.enrollment_id ilike ${like}))`); }
+    if (ctx.user.role === "sales_executive") conds.push(sql`u.sales_executive_id = (select id from sales_executives where user_id=${ctx.user.id})`);
     const rows = await db.execute(sql`select u.id, u.name, u.phone, u.email, u.status, u.username, u.raw_password, p.enrollment_id, p.course, p.department, p.session_type, p.preferred_class_time, p.validity_end_date, u.sales_executive_id counsellor_id, p.total_allocated_sessions allocated,
       (select name from sales_executives where id=u.sales_executive_id) counsellor,
       (select t.name from teacher_assignments a join users t on t.id=a.teacher_id where a.student_user_id=u.id and a.ended_at is null limit 1) teacher
