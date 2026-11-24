@@ -38,6 +38,7 @@ export const admissions = pgTable("admissions", {
   duplicateOfUserId: bigint("duplicate_of_user_id", { mode: "number" }), // same mobile already exists -> admin review
   duplicateResolved: boolean("duplicate_resolved").default(false).notNull(),
   demoId: bigint("demo_id", { mode: "number" }),                        // demo that led to this admission
+  documents: jsonb("documents").default([]),                            // extra documents: [{ name, url, type, by, at }]
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

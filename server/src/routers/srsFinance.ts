@@ -17,7 +17,27 @@ const startOf = (d: Date, unit: "day" | "week" | "month") => {
   return x;
 };
 
+/** Pay per class set for ONE teacher and ONE student (the most specific rule, so it wins over teacher-wide or default rates). */
+export async function currentStudentRate(db: any, teacherId: number, studentUserId: number): Promise<number | null> {
+  const [r] = await db.select().from(remunerationRules).where(and(eq(remunerationRules.teacherId, teacherId), eq(remunerationRules.studentUserId, studentUserId), eq(remunerationRules.kind, "regular"), eq(remunerationRules.active, true))).orderBy(desc(remunerationRules.createdAt)).limit(1);
+  return r ? Number(r.amount) : null;
+}
+/** Sets (replaces) the per-class pay of a teacher for one student. Old rule is kept switched off for history; already-earned entries never change. */
+export async function setStudentRate(db: any, user: any, teacherId: number, studentUserId: number, amount: number, reason?: string) {
+  const prev = await currentStudentRate(db, teacherId, studentUserId);
+  if (prev === amount) return;
+  await db.update(remunerationRules).set({ active: false }).where(and(eq(remunerationRules.teacherId, teacherId), eq(remunerationRules.studentUserId, studentUserId), eq(remunerationRules.kind, "regular"), eq(remunerationRules.active, true)));
+  const [row] = await db.insert(remunerationRules).values({ teacherId, studentUserId, sessionType: null, kind: "regular", amount: String(amount), active: true, createdBy: user.id } as any).returning();
+  await audit(db, user, prev == null ? "remuneration_rule_created" : "remuneration_rule_updated", "remuneration_rule", row.id, prev == null ? null : { amount: prev }, { teacherId, studentUserId, amount }, reason || "Set with teacher assignment");
+}
+
 export const srsFinanceRouter = createRouter({
+  /** Per-student pay for the student's current teacher (shown on the student page). */
+  studentRate: roleQuery("admin", "academic_head", "accountant").input(z.object({ teacherId: z.number(), studentUserId: z.number() })).query(async ({ input }) => ({ amount: await currentStudentRate(getDb(), input.teacherId, input.studentUserId) })),
+  setStudentRate: roleQuery("admin", "academic_head").input(z.object({ teacherId: z.number(), studentUserId: z.number(), amount: z.number().nonnegative(), reason: z.string().optional() })).mutation(async ({ ctx, input }) => {
+    await setStudentRate(getDb(), ctx.user, input.teacherId, input.studentUserId, input.amount, input.reason);
+    return { ok: true };
+  }),
   // ---- rules (SRS 13.2): only admin changes them ----
   rules: roleQuery(...fin).query(async () => {
     const db = getDb();

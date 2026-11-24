@@ -21,7 +21,7 @@ export const CONFIG = {
   rate_demo_bonus: { label: "Demo conversion bonus (₹, paid once)", def: "100", type: "number" },
   expiry_alert_days: { label: "Warn about expiry this many days before", def: "7", type: "number" },
   low_balance_threshold: { label: "Low class balance (classes left)", def: "3", type: "number" },
-  absent_consecutive_threshold: { label: "Consecutive absences before alert", def: "7", type: "number" },
+  absent_consecutive_threshold: { label: "Working days absent before a student is shown as inactive", def: "5", type: "number" },
   auto_expire_classes: { label: "Automatically write off unused classes after validity ends", def: "no", type: "toggle" },
   meet_fallback_enabled: { label: "Allow Google Meet fallback (manual class records)", def: "yes", type: "toggle" },
   notify_email: { label: "Send email notifications", def: "yes", type: "toggle" },

@@ -14,7 +14,7 @@ export default function Rates() {
   const sp = (k: string, v: any) => setR((p: any) => ({ ...p, [k]: v }));
   const n = (v: any) => (v === "" || v == null ? null : Number(v));
   return (
-    <Page title="Pay rates" subtitle="Defaults are set in Settings. Add a rule to override them for a teacher, course, session type or duration — the most specific rule wins. Already-recorded pay never changes."
+    <Page title="Default pay rates" subtitle="Defaults are set in Settings. Add a rule to override them for a teacher, course, session type or duration — the most specific rule wins. Already-recorded pay never changes."
       actions={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4 mr-1" />Add rule</Button>}>
       <Table rows={rules.data} empty="No rules yet — the default rates from Settings apply to everyone."
         cols={[

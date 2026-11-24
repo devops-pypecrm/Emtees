@@ -3,8 +3,9 @@ import { TRPCError } from "@trpc/server";
 import { sql } from "drizzle-orm";
 import { createRouter, roleQuery } from "../middleware";
 import { getDb } from "../queries/connection";
+import { getNumberSetting } from "../lib/settings";
 
-type Def = { title: string; group: string; roles: string[]; cols: [string, string][]; sql: (p: { from: Date; to: Date; dep: string; q: string }) => any };
+type Def = { title: string; group: string; roles: string[]; cols: [string, string][]; sql: (p: { from: Date; to: Date; dep: string; q: string; teacher: number | null; n: number }) => any };
 const all = ["admin", "academic_head", "accountant", "sales_executive", "teacher"];
 const mgmt = ["admin", "academic_head"];
 const money = ["admin", "accountant"];
@@ -12,30 +13,39 @@ const money = ["admin", "accountant"];
 /** SRS 17: every report is a SQL query returning columns + rows; the screen offers date range, search and Excel/PDF export. */
 const REPORTS: Record<string, Def> = {
   // ---- 17.1 student ----
-  "student-list": { title: "Complete student list", group: "Student", roles: mgmt, cols: [["enrollment_id", "Student ID"], ["name", "Name"], ["phone", "Mobile"], ["course", "Course"], ["department", "Department"], ["status", "Status"], ["counsellor", "Counsellor"], ["teacher", "Teacher"]],
-    sql: ({ dep, q }) => sql`select p.enrollment_id, u.name, u.phone, p.course, p.department, u.status, (select name from sales_executives where id=u.sales_executive_id) counsellor,
+  "student-list": { title: "Complete student list", group: "Student", roles: mgmt, cols: [["enrollment_id", "Student ID"], ["name", "Name"], ["phone", "Mobile"], ["course", "Course"], ["department", "Department"], ["status", "Status"], ["activity", "Activity"], ["counsellor", "Counsellor"], ["teacher", "Teacher"]],
+    sql: ({ dep, q, teacher, n }) => sql`select p.enrollment_id, u.name, u.phone, p.course, p.department, u.status, student_activity(u.id, ${n}::int) activity, (select name from sales_executives where id=u.sales_executive_id) counsellor,
       (select t.name from teacher_assignments a join users t on t.id=a.teacher_id where a.student_user_id=u.id and a.ended_at is null limit 1) teacher
-      from users u left join profiles p on p.user_id=u.id where u.role='student' and coalesce(p.department,'') ilike ${"%" + dep + "%"} and (u.name ilike ${"%" + q + "%"} or coalesce(u.phone,'') ilike ${"%" + q + "%"} or coalesce(p.enrollment_id,'') ilike ${"%" + q + "%"}) order by u.name limit 5000` },
-  "student-balance": { title: "Student class balance & validity", group: "Student", roles: mgmt, cols: [["enrollment_id", "Student ID"], ["name", "Name"], ["allocated", "Allocated"], ["consumed", "Completed"], ["balance", "Balance"], ["validity_end", "Expiry"], ["days_left", "Days left"]],
-    sql: ({ dep, q }) => sql`select p.enrollment_id, u.name, p.total_allocated_sessions allocated, (select count(*) from class_ledger_transactions l where l.student_id=u.id and l.type='debit') consumed,
+      from users u left join profiles p on p.user_id=u.id where u.role='student' and coalesce(p.department,'') ilike ${"%" + dep + "%"} and (u.name ilike ${"%" + q + "%"} or coalesce(u.phone,'') ilike ${"%" + q + "%"} or coalesce(p.enrollment_id,'') ilike ${"%" + q + "%"}) and (${teacher}::bigint is null or exists (select 1 from teacher_assignments a where a.student_user_id=u.id and a.ended_at is null and a.teacher_id=${teacher}::bigint)) order by u.name limit 5000` },
+  "student-balance": { title: "Student class balance & validity", group: "Student", roles: mgmt, cols: [["enrollment_id", "Student ID"], ["name", "Name"], ["department", "Department"], ["teacher", "Teacher"], ["allocated", "Allocated"], ["consumed", "Completed"], ["balance", "Balance"], ["used_pct", "Used %"], ["validity_end", "Expiry"], ["days_left", "Days left"], ["validity_status", "Validity"], ["activity", "Activity"]],
+    sql: ({ dep, q, teacher, n }) => sql`select * from (select p.enrollment_id, u.name, p.department,
+      (select t.name from teacher_assignments a join users t on t.id=a.teacher_id where a.student_user_id=u.id and a.ended_at is null limit 1) teacher,
+      p.total_allocated_sessions allocated, (select count(*) from class_ledger_transactions l where l.student_id=u.id and l.type='debit') consumed,
       greatest(0, p.total_allocated_sessions - (select count(*) from class_ledger_transactions l where l.student_id=u.id and l.type in ('debit','expired'))) balance,
-      to_char(p.validity_end_date,'YYYY-MM-DD') validity_end, case when p.validity_end_date is null then null else (p.validity_end_date::date - current_date) end days_left
-      from profiles p join users u on u.id=p.user_id where u.role='student' and p.total_allocated_sessions>0 and coalesce(p.department,'') ilike ${"%" + dep + "%"} and u.name ilike ${"%" + q + "%"} order by days_left nulls last limit 5000` },
+      round(100.0*(select count(*) from class_ledger_transactions l where l.student_id=u.id and l.type='debit')/nullif(p.total_allocated_sessions,0),0) used_pct,
+      to_char(p.validity_end_date,'YYYY-MM-DD') validity_end, case when p.validity_end_date is null then null else (p.validity_end_date::date - current_date) end days_left,
+      case when p.validity_end_date is null then 'Not started' when p.validity_end_date::date < current_date then 'Expired' when p.validity_end_date::date - current_date <= 7 then 'Expiring soon' else 'Valid' end validity_status,
+      student_activity(u.id, ${n}::int) activity
+      from profiles p join users u on u.id=p.user_id where u.role='student' and p.total_allocated_sessions>0 and coalesce(p.department,'') ilike ${"%" + dep + "%"} and u.name ilike ${"%" + q + "%"}
+      and (${teacher}::bigint is null or exists (select 1 from teacher_assignments a where a.student_user_id=u.id and a.ended_at is null and a.teacher_id=${teacher}::bigint))) x order by days_left nulls last limit 5000` },
   "student-attendance": { title: "Student attendance", group: "Student", roles: mgmt, cols: [["student", "Student"], ["present", "Present"], ["absent", "Absent"], ["interrupted", "Interrupted"], ["total", "Total"], ["pct", "Attendance %"]],
-    sql: ({ from, to, q }) => sql`select u.name student, count(*) filter (where a.status='present') present, count(*) filter (where a.status='absent') absent, count(*) filter (where a.status='interrupted') interrupted, count(*) total,
-      round(100.0*count(*) filter (where a.status='present')/nullif(count(*),0),1) pct from attendance a join users u on u.id=a.student_id where a.attendance_date between ${from} and ${to} and u.name ilike ${"%" + q + "%"} group by u.id,u.name order by u.name limit 5000` },
+    sql: ({ from, to, q, teacher }) => sql`select u.name student, count(*) filter (where a.attendance_status='present') present, count(*) filter (where a.attendance_status='absent') absent, count(*) filter (where a.attendance_status='interrupted') interrupted, count(*) total,
+      round(100.0*count(*) filter (where a.attendance_status='present')/nullif(count(*),0),1) pct from attendance a join users u on u.id=a.student_id where a.attendance_date between ${from} and ${to} and u.name ilike ${"%" + q + "%"} and (${teacher}::bigint is null or a.teacher_id=${teacher}::bigint) group by u.id,u.name order by u.name limit 5000` },
   "student-classes": { title: "Student class history", group: "Student", roles: mgmt, cols: [["when", "Date & time"], ["student", "Student"], ["teacher", "Teacher"], ["status", "Status"], ["minutes", "Qualifying minutes"], ["manual", "Manual (Meet)"]],
-    sql: ({ from, to, q }) => sql`select to_char(s.scheduled_at at time zone 'Asia/Kolkata','YYYY-MM-DD HH24:MI') "when", st.name student, t.name teacher, s.session_status status, coalesce(s.student_duration,0) minutes, case when s.is_manual then 'Yes' else '' end manual
-      from one_to_one_sessions s join users st on st.id=s.student_id join users t on t.id=s.teacher_id where s.scheduled_at between ${from} and ${to} and st.name ilike ${"%" + q + "%"} order by s.scheduled_at desc limit 5000` },
+    sql: ({ from, to, q, teacher }) => sql`select to_char(s.scheduled_at at time zone 'Asia/Kolkata','YYYY-MM-DD HH24:MI') "when", st.name student, t.name teacher, s.session_status status, coalesce(s.student_duration,0) minutes, case when s.is_manual then 'Yes' else '' end manual
+      from one_to_one_sessions s join users st on st.id=s.student_id join users t on t.id=s.teacher_id where s.scheduled_at between ${from} and ${to} and st.name ilike ${"%" + q + "%"} and (${teacher}::bigint is null or s.teacher_id=${teacher}::bigint) order by s.scheduled_at desc limit 5000` },
   "teacher-change-history": { title: "Teacher change history", group: "Student", roles: mgmt, cols: [["student", "Student"], ["teacher", "Teacher"], ["reason", "Reason"], ["note", "Note"], ["started", "From"], ["ended", "Until"], ["classes_at_start", "Balance at start"]],
     sql: ({ from, to, q }) => sql`select st.name student, t.name teacher, a.reason, a.reason_note note, to_char(a.started_at,'YYYY-MM-DD') started, to_char(a.ended_at,'YYYY-MM-DD') ended, a.classes_at_start
       from teacher_assignments a join users st on st.id=a.student_user_id join users t on t.id=a.teacher_id where a.started_at between ${from} and ${to} and st.name ilike ${"%" + q + "%"} order by a.started_at desc limit 5000` },
   "purchase-history": { title: "Additional course purchase history", group: "Student", roles: [...mgmt, "accountant"], cols: [["when", "Date"], ["student", "Student"], ["kind", "Type"], ["classes", "Classes"], ["amount", "Amount"], ["reason", "Reason"]],
     sql: ({ from, to, q }) => sql`select to_char(c.created_at,'YYYY-MM-DD') "when", u.name student, c.kind, c.classes, c.amount, c.reason from course_allocations c join users u on u.id=c.student_user_id where c.created_at between ${from} and ${to} and u.name ilike ${"%" + q + "%"} order by c.created_at desc limit 5000` },
   // ---- 17.2 teacher ----
-  "teacher-students": { title: "Teacher-wise student list", group: "Teacher", roles: mgmt, cols: [["teacher", "Teacher"], ["student", "Student"], ["department", "Department"], ["since", "Assigned since"]],
-    sql: ({ dep, q }) => sql`select t.name teacher, s.name student, p.department, to_char(a.started_at,'YYYY-MM-DD') since from teacher_assignments a join users t on t.id=a.teacher_id join users s on s.id=a.student_user_id left join profiles p on p.user_id=s.id
-      where a.ended_at is null and coalesce(p.department,'') ilike ${"%" + dep + "%"} and t.name ilike ${"%" + q + "%"} order by t.name, s.name limit 5000` },
+  "teacher-students": { title: "Teacher-wise student list", group: "Teacher", roles: mgmt, cols: [["teacher", "Teacher"], ["student", "Student"], ["enrollment_id", "Student ID"], ["department", "Department"], ["since", "Assigned since"], ["balance", "Balance"], ["validity_end", "Expiry"], ["activity", "Activity"]],
+    sql: ({ dep, q, teacher, n }) => sql`select t.name teacher, s.name student, p.enrollment_id, p.department, to_char(a.started_at,'YYYY-MM-DD') since,
+      greatest(0, coalesce(p.total_allocated_sessions,0) - (select count(*) from class_ledger_transactions l where l.student_id=s.id and l.type in ('debit','expired'))) balance,
+      to_char(p.validity_end_date,'YYYY-MM-DD') validity_end, student_activity(s.id, ${n}::int) activity
+      from teacher_assignments a join users t on t.id=a.teacher_id join users s on s.id=a.student_user_id left join profiles p on p.user_id=s.id
+      where a.ended_at is null and coalesce(p.department,'') ilike ${"%" + dep + "%"} and t.name ilike ${"%" + q + "%"} and (${teacher}::bigint is null or a.teacher_id=${teacher}::bigint) order by t.name, s.name limit 5000` },
   "teacher-classes": { title: "Teacher classes, hours & missed", group: "Teacher", roles: mgmt, cols: [["teacher", "Teacher"], ["completed", "Completed"], ["missed", "Missed"], ["cancelled", "Cancelled"], ["interrupted", "Interrupted"], ["hours", "Teaching hours"]],
     sql: ({ from, to, q }) => sql`select t.name teacher, count(*) filter (where s.session_status='completed') completed, count(*) filter (where s.session_status='scheduled' and s.scheduled_at<now()) missed,
       count(*) filter (where s.session_status='cancelled') cancelled, count(*) filter (where s.session_status='completed' and s.student_duration < 1) interrupted,
@@ -78,7 +88,7 @@ export const srsReportsRouter = createRouter({
   catalog: roleQuery(...all).query(({ ctx }) =>
     Object.entries(REPORTS).filter(([, d]) => ctx.user.role === "super_admin" || d.roles.includes(ctx.user.role)).map(([key, d]) => ({ key, title: d.title, group: d.group }))),
 
-  run: roleQuery(...all).input(z.object({ key: z.string(), from: z.date(), to: z.date(), department: z.enum(["english", "hindi", "all"]).default("all"), search: z.string().default("") }))
+  run: roleQuery(...all).input(z.object({ key: z.string(), from: z.date(), to: z.date(), department: z.enum(["english", "hindi", "all"]).default("all"), search: z.string().default(""), teacherId: z.number().optional() }))
     .query(async ({ ctx, input }) => {
       const def = REPORTS[input.key];
       if (!def || (ctx.user.role !== "super_admin" && !def.roles.includes(ctx.user.role))) throw new TRPCError({ code: "FORBIDDEN", message: "You cannot open this report" });
@@ -90,7 +100,63 @@ export const srsReportsRouter = createRouter({
         dep = d.includes("hindi") ? "hindi" : d.includes("english") ? "english" : dep;
       }
       const to = new Date(input.to); to.setHours(23, 59, 59, 999);
-      const rows = (await db.execute(def.sql({ from: input.from, to, dep, q: input.search }))).rows as any[];
+      const n = await getNumberSetting(db, "absent_consecutive_threshold");
+      const teacher = ctx.user.role === "teacher" ? ctx.user.id : input.teacherId ?? null;
+      const rows = (await db.execute(def.sql({ from: input.from, to, dep, q: input.search, teacher, n }))).rows as any[];
       return { title: def.title, columns: def.cols.map(([key, label]) => ({ key, label })), rows };
+    }),
+
+  /** Teachers for the report filters. */
+  teachers: roleQuery("admin", "academic_head", "accountant").query(async ({ ctx }) => {
+    const db = getDb();
+    let dep = "";
+    if (ctx.user.role === "academic_head") {
+      const me: any = (await db.execute(sql`select department from users where id=${ctx.user.id}`)).rows[0];
+      const d = (me?.department || "").toLowerCase(); dep = d.includes("hindi") ? "hindi" : d.includes("english") ? "english" : "";
+    }
+    return (await db.execute(sql`select id, name from users where role='teacher' and (${dep} = '' or coalesce(department,'') = '' or department ilike ${"%" + dep + "%"}) order by name`)).rows as any[];
+  }),
+
+  /**
+   * Monthly attendance sheet per teacher: one row per student, one column per date of the month (SRS 16).
+   * A class held = present, a class that was due but not held = absent; days without a class stay blank.
+   */
+  attendanceMatrix: roleQuery("admin", "academic_head", "teacher").input(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/), teacherId: z.number().optional(), department: z.enum(["english", "hindi", "all"]).default("all") }))
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+      const [y, m] = input.month.split("-").map(Number);
+      const days = new Date(y, m, 0).getDate();
+      const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0) - 5.5 * 3600 * 1000); // IST month bounds
+      const end = new Date(Date.UTC(y, m, 1, 0, 0, 0) - 5.5 * 3600 * 1000);
+      let dep = input.department === "all" ? "" : input.department;
+      if (ctx.user.role === "academic_head") {
+        const me: any = (await db.execute(sql`select department from users where id=${ctx.user.id}`)).rows[0];
+        const d = (me?.department || "").toLowerCase(); dep = d.includes("hindi") ? "hindi" : d.includes("english") ? "english" : dep;
+      }
+      const teacher = ctx.user.role === "teacher" ? ctx.user.id : input.teacherId ?? null;
+      const sessions = (await db.execute(sql`select s.teacher_id, s.student_id, extract(day from s.scheduled_at at time zone 'Asia/Kolkata')::int d,
+          case when exists (select 1 from attendance a where a.one_to_one_session_id=s.id and a.attendance_status='present') then 'present'
+               when s.session_status='cancelled' then null when s.scheduled_at < now() then 'absent' else null end st
+        from one_to_one_sessions s join profiles p on p.user_id=s.student_id
+        where s.scheduled_at >= ${start} and s.scheduled_at < ${end} and (${teacher}::bigint is null or s.teacher_id=${teacher}::bigint) and coalesce(p.department,'') ilike ${"%" + dep + "%"}`)).rows as any[];
+      const assigned = (await db.execute(sql`select a.teacher_id, a.student_user_id student_id from teacher_assignments a join profiles p on p.user_id=a.student_user_id
+        where a.ended_at is null and (${teacher}::bigint is null or a.teacher_id=${teacher}::bigint) and coalesce(p.department,'') ilike ${"%" + dep + "%"}`)).rows as any[];
+      const pairs = new Map<string, { teacherId: number; studentId: number; days: Record<number, string> }>();
+      const touch = (t: number, s: number) => { const k = `${t}:${s}`; if (!pairs.has(k)) pairs.set(k, { teacherId: Number(t), studentId: Number(s), days: {} }); return pairs.get(k)!; };
+      for (const a of assigned) touch(a.teacher_id, a.student_id);
+      for (const r of sessions) { const p = touch(r.teacher_id, r.student_id); if (r.st && p.days[r.d] !== "present") p.days[r.d] = r.st; }
+      const ids = Array.from(new Set(Array.from(pairs.values()).flatMap((p) => [p.teacherId, p.studentId])));
+      const names = new Map<number, any>();
+      if (ids.length) for (const r of (await db.execute(sql`select u.id, u.name, p.enrollment_id from users u left join profiles p on p.user_id=u.id where u.id in (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})`)).rows as any[]) names.set(Number(r.id), r);
+      const byTeacher = new Map<number, any>();
+      for (const p of pairs.values()) {
+        if (!byTeacher.has(p.teacherId)) byTeacher.set(p.teacherId, { id: p.teacherId, name: names.get(p.teacherId)?.name || "Teacher", students: [] });
+        const vals = Object.values(p.days);
+        byTeacher.get(p.teacherId).students.push({ id: p.studentId, name: names.get(p.studentId)?.name || "", enrollmentId: names.get(p.studentId)?.enrollment_id || "", days: p.days,
+          present: vals.filter((v) => v === "present").length, absent: vals.filter((v) => v === "absent").length });
+      }
+      const teachers = Array.from(byTeacher.values()).sort((a, b) => a.name.localeCompare(b.name));
+      teachers.forEach((t) => t.students.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+      return { month: input.month, days, teachers };
     }),
 });

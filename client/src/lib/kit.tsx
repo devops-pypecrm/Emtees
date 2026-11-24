@@ -1,11 +1,11 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
+import { Loader2, SlidersHorizontal, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 
 export const inr = (n: number | string | null | undefined) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
 export const fmtDate = (d: any) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
@@ -60,33 +60,81 @@ export function Loading({ text = "Loading…" }: { text?: string }) {
 }
 export const Empty = ({ text }: { text: string }) => <div className="text-center text-sm text-slate-400 py-16 border border-dashed border-slate-200 rounded-xl bg-white">{text}</div>;
 
-export type Col<T> = { header: string; cell: (r: T) => ReactNode; className?: string };
+export type Col<T> = { header: string; cell: (r: T) => ReactNode; className?: string; /** value used to sort/filter when the cell is not plain text */ value?: (r: T) => string | number | null | undefined; nofilter?: boolean };
+
+/** Plain text of whatever a cell renders, so any column can be sorted and filtered without extra code. */
+function nodeText(n: any): string {
+  if (n == null || typeof n === "boolean") return "";
+  if (typeof n === "string" || typeof n === "number") return String(n);
+  if (Array.isArray(n)) return n.map(nodeText).filter(Boolean).join(" ");
+  const p = n.props || {};
+  if (p.label != null && typeof p.label === "string") return p.label;
+  if (p.value != null && typeof p.value === "string" && n.type && (n.type as any).name === "Chip") return STATUS_LABEL[p.value] ?? p.value.replace(/_/g, " ");
+  return nodeText(p.children);
+}
+const numOf = (t: string) => { const m = t.replace(/[₹,\s%]/g, ""); return m !== "" && /^-?\d+(\.\d+)?$/.test(m) ? Number(m) : null; };
+const dateOf = (t: string) => (/^\d{1,2} [A-Za-z]{3} \d{4}|^\d{4}-\d{2}-\d{2}/.test(t) ? Date.parse(t.replace(/,.*$/, "")) || null : null);
+function compare(a: string, b: string) {
+  if (!a && !b) return 0; if (!a) return 1; if (!b) return -1; // empty values always last
+  const na = numOf(a), nb = numOf(b); if (na != null && nb != null) return na - nb;
+  const da = dateOf(a), db = dateOf(b); if (da != null && db != null) return da - db;
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
 export function Table<T>({ cols, rows, empty = "Nothing to show", onRow, searchable }: { cols: Col<T>[]; rows: T[] | undefined; empty?: string; onRow?: (r: T) => void; searchable?: boolean }) {
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState<{ i: number; dir: 1 | -1 } | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Record<number, string>>({});
+  const text = (c: Col<T>, r: T) => { const v = c.value ? c.value(r) : undefined; return v != null ? String(v) : nodeText(c.cell(r)).trim(); };
+  const matrix = useMemo(() => (rows || []).map((r) => cols.map((c) => text(c, r))), [rows, cols]); // eslint-disable-line react-hooks/exhaustive-deps
+  const options = useMemo(() => cols.map((_, i) => { const u = Array.from(new Set(matrix.map((m) => m[i]).filter(Boolean))); return u.length > 1 && u.length <= 15 ? u.sort((a, b) => compare(a, b)) : null; }), [matrix, cols]);
   if (!rows) return <Loading />;
   if (!rows.length) return <Empty text={empty} />;
   // A search box appears by itself on longer lists; pages with their own search pass searchable={false}.
   const showSearch = searchable ?? rows.length >= 8;
   const needle = q.trim().toLowerCase();
-  const shown = needle ? rows.filter((r) => { try { return JSON.stringify(r).toLowerCase().includes(needle); } catch { return true; } }) : rows;
+  const active = Object.entries(filters).filter(([, v]) => v);
+  let idx = rows.map((_, i) => i).filter((i) => {
+    if (needle && !matrix[i].join(" ").toLowerCase().includes(needle)) return false;
+    return active.every(([ci, v]) => (options[Number(ci)] ? matrix[i][Number(ci)] === v : matrix[i][Number(ci)].toLowerCase().includes(v.toLowerCase())));
+  });
+  if (sort) idx = [...idx].sort((x, y) => sort.dir * compare(matrix[x][sort.i], matrix[y][sort.i]));
+  const clickSort = (i: number) => setSort((s) => (!s || s.i !== i ? { i, dir: 1 } : s.dir === 1 ? { i, dir: -1 } : null));
+  const clear = () => { setFilters({}); setQ(""); setSort(null); };
+  const dirty = active.length > 0 || !!needle || !!sort;
   return (
     <div className="space-y-3">
-    {showSearch && <div className="max-w-xs"><Input placeholder="Search this list…" value={q} onChange={(e) => setQ(e.target.value)} /></div>}
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
-          <tr>{cols.map((c, i) => <th key={i} className={`px-5 py-3 font-medium whitespace-nowrap ${c.className || ""}`}>{c.header}</th>)}</tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {shown.map((r, i) => (
-            <tr key={i} className={`${onRow ? "cursor-pointer" : ""} hover:bg-slate-50/70 transition-colors`} onClick={() => onRow?.(r)}>
-              {cols.map((c, j) => <td key={j} className={`px-5 py-3.5 align-middle text-slate-700 ${c.className || ""}`}>{c.cell(r)}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {!shown.length && <div className="p-8 text-center text-sm text-slate-400">No matches for “{q}”</div>}
-    </div>
+      <div className="flex flex-wrap items-center gap-3">
+        {showSearch && <div className="w-full sm:w-64"><Input placeholder="Search this list…" value={q} onChange={(e) => setQ(e.target.value)} /></div>}
+        {rows.length >= 5 && <Button size="sm" variant={showFilters ? "default" : "outline"} onClick={() => setShowFilters((v) => !v)}><SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />Filters{active.length ? ` (${active.length})` : ""}</Button>}
+        {dirty && <Button size="sm" variant="ghost" onClick={clear}>Clear all</Button>}
+        <span className="text-xs text-slate-400 ml-auto">{idx.length === rows.length ? `${rows.length} rows` : `${idx.length} of ${rows.length} rows`}</span>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+            <tr>{cols.map((c, i) => (
+              <th key={i} className={`px-5 py-3 font-medium whitespace-nowrap ${c.className || ""}`}>
+                {c.header ? <button type="button" onClick={() => clickSort(i)} className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-800">
+                  {c.header}{sort?.i === i ? (sort.dir === 1 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}</button> : null}
+              </th>))}</tr>
+            {showFilters && rows.length >= 5 && <tr className="bg-white normal-case tracking-normal">{cols.map((c, i) => (
+              <th key={i} className="px-3 py-2 font-normal">
+                {!c.header || c.nofilter ? null : options[i]
+                  ? <select className="h-8 w-full min-w-24 rounded-md border border-slate-200 bg-white px-2 text-xs" value={filters[i] || ""} onChange={(e) => setFilters((f) => ({ ...f, [i]: e.target.value }))}><option value="">All</option>{options[i]!.map((o) => <option key={o} value={o}>{o}</option>)}</select>
+                  : <input className="h-8 w-full min-w-24 rounded-md border border-slate-200 px-2 text-xs" placeholder="Filter…" value={filters[i] || ""} onChange={(e) => setFilters((f) => ({ ...f, [i]: e.target.value }))} />}
+              </th>))}</tr>}
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {idx.map((ri) => { const r = rows[ri]; return (
+              <tr key={ri} className={`${onRow ? "cursor-pointer" : ""} hover:bg-slate-50/70 transition-colors`} onClick={() => onRow?.(r)}>
+                {cols.map((c, j) => <td key={j} className={`px-5 py-3.5 align-middle text-slate-700 ${c.className || ""}`}>{c.cell(r)}</td>)}
+              </tr>); })}
+          </tbody>
+        </table>
+        {!idx.length && <div className="p-8 text-center text-sm text-slate-400">No rows match these filters</div>}
+      </div>
     </div>
   );
 }
@@ -149,3 +197,15 @@ export function exportTable(title: string, columns: { key: string; label: string
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = `${name}.${kind}`; a.click(); URL.revokeObjectURL(a.href);
 }
+
+
+/** Uploads one file with the signed-in staff login and returns its URL. Public registration uses its own token-based upload. */
+export async function uploadStaffDoc(file: File): Promise<string> {
+  if (file.size > 5 * 1024 * 1024) throw new Error("File must be under 5 MB");
+  const b64: string = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(file); });
+  const up = await fetch("/api/uploads/doc", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token") || ""}` }, body: JSON.stringify({ filename: file.name, dataBase64: b64 }) });
+  const j = await up.json().catch(() => ({}));
+  if (!up.ok) throw new Error(j.error || "Upload failed");
+  return j.url as string;
+}
+export const DOC_TYPES = [{ value: "payment_receipt", label: "Payment screenshot / receipt" }, { value: "id_proof", label: "ID proof" }, { value: "address_proof", label: "Address proof" }, { value: "other", label: "Other document" }];

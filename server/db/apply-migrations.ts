@@ -411,6 +411,21 @@ export async function applyMigrations() {
       SELECT a.id, a.status, 'Imported from existing student record' FROM admissions a
       WHERE a.payment_method = 'imported' AND NOT EXISTS (SELECT 1 FROM admission_status_history h WHERE h.admission_id = a.id);`);
     // Testing: minimum qualifying minutes 1 -> 5 (one time only; later changes in Settings are never overwritten).
+    await client.query(`ALTER TABLE "admissions" ADD COLUMN IF NOT EXISTS "documents" jsonb DEFAULT '[]'::jsonb;`);
+    // A student counts as inactive when, over their last N class days (Sundays excluded), they never attended.
+    await client.query(`
+      CREATE OR REPLACE FUNCTION student_activity(uid bigint, n int) RETURNS text AS $$
+        SELECT CASE WHEN count(*) >= n AND NOT coalesce(bool_or(p), false) THEN 'Inactive' ELSE 'Active' END FROM (
+          SELECT d, bool_or(p) p FROM (
+            SELECT (s.scheduled_at AT TIME ZONE 'Asia/Kolkata')::date d,
+                   EXISTS (SELECT 1 FROM attendance a WHERE a.one_to_one_session_id = s.id AND a.attendance_status = 'present') p
+            FROM one_to_one_sessions s
+            WHERE s.student_id = uid AND s.scheduled_at < now() AND s.session_status NOT IN ('cancelled', 'ongoing')
+              AND extract(dow FROM s.scheduled_at AT TIME ZONE 'Asia/Kolkata') <> 0
+          ) t GROUP BY d ORDER BY d DESC LIMIT n
+        ) z
+      $$ LANGUAGE sql STABLE;
+    `);
     console.log("Creating password_resets table...");
     await client.query(`
       CREATE TABLE IF NOT EXISTS "password_resets" (

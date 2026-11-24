@@ -569,3 +569,13 @@ Delete the §D features and drop their tables; database documentation, user manu
 - **Add student (one step)** on Students: personal details, enrolment, payment, class allocation and optional teacher, all recorded in the SRS records.
 - **Users** page lists every account (students and all staff) with role tabs and search.
 - Search on every long list, responsive dialogs, student can open the classroom at any time (SRS 7.1).
+
+## Added in the second round
+- Every table: click a header to sort, a Filters row (dropdown for short lists, text box otherwise), global search, row counts, Clear all.
+- Reports: Period dropdown with All time; Teacher filter; richer class balance & validity (teacher, used %, days left, validity status, activity).
+- **Student attendance** page: month sheet per teacher (green tick / red cross per date), Excel per teacher, ZIP with one file per teacher.
+- **Teacher changes** page: Log tab and Per student tab (first two changes in the row, full journey in a pop-up).
+- Student activity: Inactive after N class days (Sundays excluded) with no attendance; N = Settings "Working days absent" (default 5). Shown on teacher-wise lists, My students and the student page.
+- Teacher pay is per teacher AND per student, set when assigning or changing a teacher (and on the student page). Default pay rates remain only as fallback.
+- Add student: admin (full, verified at entry), academic head and counsellor (payment goes to finance), student self-enrolment link (admin / head / counsellor can create). Documents: payment screenshot and other files, on the form, the public form and the student page.
+- Academic head can allocate classes (initial / additional / adjustment).

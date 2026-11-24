@@ -10,6 +10,7 @@ import {
 import { audit } from "../lib/audit";
 import { getBalance } from "../lib/balance";
 import { getNumberSetting } from "../lib/settings";
+import { currentStudentRate, setStudentRate } from "./srsFinance";
 import { setAdmissionStatus } from "./srsAdmissions";
 import { NotificationService } from "../lib/notificationService";
 
@@ -66,7 +67,7 @@ export const srsAcademicRouter = createRouter({
   /** First assignment. Needs a verified payment for admission-based students (SRS 5.1). */
   assignTeacher: roleQuery(...heads).input(z.object({
     studentUserId: z.number(), teacherId: z.number(), admissionId: z.number().optional(),
-    preferredTiming: z.string().optional(), durationMinutes: z.number().int().optional(),
+    preferredTiming: z.string().optional(), durationMinutes: z.number().int().optional(), payPerClass: z.number().nonnegative().optional(),
   })).mutation(async ({ ctx, input }) => {
     const db = getDb();
     await guardDepartment(db, ctx.user, input.studentUserId);
@@ -81,6 +82,7 @@ export const srsAcademicRouter = createRouter({
       studentUserId: input.studentUserId, teacherId: input.teacherId, preferredTiming: input.preferredTiming, durationMinutes: input.durationMinutes,
       classesAtStart: bal.balance, reason: "initial", assignedBy: ctx.user.id,
     });
+    if (input.payPerClass != null) await setStudentRate(db, ctx.user, input.teacherId, input.studentUserId, input.payPerClass);
     if (input.admissionId) await setAdmissionStatus(db, input.admissionId, "teacher_assigned", ctx.user.id);
     await audit(db, ctx.user, "teacher_assigned", "student", input.studentUserId, null, { teacherId: input.teacherId });
     const t = await db.query.users.findFirst({ where: eq(users.id, input.teacherId) });
@@ -91,7 +93,7 @@ export const srsAcademicRouter = createRouter({
 
   /** SRS 6.3: replacing the teacher keeps the same course, ID and balance. Only the teacher on future classes changes. */
   changeTeacher: roleQuery(...heads).input(z.object({
-    studentUserId: z.number(), newTeacherId: z.number(), reason: z.enum(CHANGE_REASONS), reasonNote: z.string().optional(),
+    studentUserId: z.number(), newTeacherId: z.number(), reason: z.enum(CHANGE_REASONS), reasonNote: z.string().optional(), payPerClass: z.number().nonnegative().optional(),
   })).mutation(async ({ ctx, input }) => {
     const db = getDb();
     await guardDepartment(db, ctx.user, input.studentUserId);
@@ -103,6 +105,7 @@ export const srsAcademicRouter = createRouter({
       studentUserId: input.studentUserId, teacherId: input.newTeacherId, department: cur?.department, preferredTiming: cur?.preferredTiming,
       durationMinutes: cur?.durationMinutes, classesAtStart: before.balance, reason: input.reason, reasonNote: input.reasonNote, assignedBy: ctx.user.id,
     });
+    if (input.payPerClass != null) await setStudentRate(db, ctx.user, input.newTeacherId, input.studentUserId, input.payPerClass);
     // future scheduled sessions and timetable move to the new teacher; completed ones stay with the old teacher
     await db.update(oneToOneSessions).set({ teacherId: input.newTeacherId })
       .where(and(eq(oneToOneSessions.studentId, input.studentUserId), eq(oneToOneSessions.status, "scheduled"), gte(oneToOneSessions.scheduledAt, new Date())));
@@ -110,6 +113,18 @@ export const srsAcademicRouter = createRouter({
     const after = await getBalance(db, input.studentUserId);
     await audit(db, ctx.user, "teacher_changed", "student", input.studentUserId, { teacherId: cur?.teacherId, balance: before.balance }, { teacherId: input.newTeacherId, balance: after.balance }, `${input.reason}${input.reasonNote ? ": " + input.reasonNote : ""}`);
     return { ok: true, balance: after.balance };
+  }),
+
+  /** Every teacher assignment ever made (SRS 6.3), for the Teacher changes page: a log and a per-student view. Heads see their own department. */
+  changeHistory: roleQuery(...heads, "accountant").query(async ({ ctx }) => {
+    const db = getDb();
+    const me = await db.query.users.findFirst({ where: eq(users.id, ctx.user.id) });
+    const dep = ctx.user.role === "academic_head" ? deptOf(me) : null;
+    const rows = (await db.execute(sql`select a.id, a.student_user_id "studentId", st.name student, p.enrollment_id "enrollmentId", p.department, a.teacher_id "teacherId", t.name teacher,
+        a.reason, a.reason_note "reasonNote", a.classes_at_start "classesAtStart", a.started_at "startedAt", a.ended_at "endedAt", ab.name "assignedBy"
+      from teacher_assignments a join users st on st.id=a.student_user_id join users t on t.id=a.teacher_id left join profiles p on p.user_id=st.id left join users ab on ab.id=a.assigned_by
+      where ${dep ? sql`coalesce(p.department,'') ilike ${"%" + dep + "%"}` : sql`true`} order by a.started_at desc limit 5000`)).rows;
+    return rows as any[];
   }),
 
   assignmentHistory: authedQuery.input(z.object({ studentUserId: z.number() })).query(async ({ ctx, input }) => {
@@ -134,7 +149,11 @@ export const srsAcademicRouter = createRouter({
     const [last] = await db.select().from(attendance).where(and(eq(attendance.studentId, input.studentUserId), eq(attendance.status, "present"))).orderBy(desc(attendance.attendanceDate)).limit(1);
     const [ad] = await db.select().from(admissions).where(eq(admissions.studentUserId, input.studentUserId)).orderBy(desc(admissions.createdAt)).limit(1);
     const days = bal.validityEndDate ? Math.ceil((new Date(bal.validityEndDate).getTime() - Date.now()) / 86400000) : null;
+    const threshold = await getNumberSetting(db, "absent_consecutive_threshold");
+    const activity = ((await db.execute(sql`select student_activity(${input.studentUserId}::bigint, ${threshold}::int) a`)).rows[0] as any)?.a || "Active";
+    const rate = cur ? await currentStudentRate(db, cur.a.teacherId, input.studentUserId) : null;
     return {
+      activity, payPerClass: rate,
       id: u.id, name: u.name, phone: u.phone, email: u.email, enrollmentId: p?.enrollmentId, course: p?.course, department: p?.department || u.department,
       sessionType: p?.sessionType, preferredTiming: p?.preferredClassTime, admissionStatus: ad?.status || null, admissionId: ad?.id || null,
       teacher: cur ? { id: cur.a.teacherId, name: cur.tn } : null, ...bal, remainingDays: days,

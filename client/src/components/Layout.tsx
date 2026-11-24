@@ -1,7 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
-  Bell, LogOut, Menu, X, Home, Users, CreditCard, ClipboardList, Settings, BarChart3, GraduationCap, Wallet,
+  CalendarCheck, Repeat, Bell, LogOut, Menu, X, Home, Users, CreditCard, ClipboardList, Settings, BarChart3, GraduationCap, Wallet,
   UserCheck, Calendar, MessageSquare, Video, Shield, UserPlus, Clock, Percent, UsersRound, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -37,13 +37,13 @@ export function navFor(role: string): Group[] {
         { items: [I("/", "Overview", Home)] },
         { title: "Students", items: [I("/assign", "Assign teachers", UserCheck), I("/students", "All students", Users), I("/requests", "Requests", MessageSquare)] },
         { title: "Classes", items: [I("/timetable", "Timetable", Calendar), I("/groups", "Group sessions", UsersRound), I("/demos", "Demo classes", Video)] },
-        { title: "Team", items: [I("/teachers", "Teachers", GraduationCap), I("/reports", "Reports", BarChart3)] },
+        { title: "Team", items: [I("/teachers", "Teachers", GraduationCap), I("/attendance", "Attendance", CalendarCheck), I("/teacher-changes", "Teacher changes", Repeat), I("/reports", "Reports", BarChart3)] },
       ];
     case "teacher":
       return [
         { items: [I("/", "Today", Home), I("/my-students", "My students", Users)] },
         { title: "Classes", items: [I("/groups", "Group sessions", UsersRound), I("/demos", "Demo classes", Video)] },
-        { title: "Me", items: [I("/earnings", "Earnings", Wallet), I("/availability", "Availability", Clock), I("/requests", "Requests", MessageSquare), I("/reports", "Reports", BarChart3)] },
+        { title: "Me", items: [I("/attendance", "Attendance", CalendarCheck), I("/earnings", "Earnings", Wallet), I("/availability", "Availability", Clock), I("/requests", "Requests", MessageSquare), I("/reports", "Reports", BarChart3)] },
       ];
     case "student":
       return [{ items: [I("/", "My course", Home), I("/classes", "Classes", ClipboardList), I("/groups", "Group sessions", UsersRound), I("/requests", "Requests", MessageSquare)] }];
@@ -51,8 +51,8 @@ export function navFor(role: string): Group[] {
       return [
         { items: [I("/", "Overview", Home)] },
         { title: "Admissions", items: [I("/admissions", "Admissions", UserPlus), I("/payments", "Payments", CreditCard)] },
-        { title: "Academics", items: [I("/assign", "Assign teachers", UserCheck), I("/students", "Students", Users), I("/timetable", "Timetable", Calendar), I("/groups", "Group sessions", UsersRound), I("/demos", "Demo classes", Video), I("/requests", "Requests", MessageSquare)] },
-        { title: "Finance", items: [I("/teacher-pay", "Teacher pay", Wallet), I("/rates", "Pay rates", Percent)] },
+        { title: "Academics", items: [I("/assign", "Assign teachers", UserCheck), I("/students", "Students", Users), I("/timetable", "Timetable", Calendar), I("/groups", "Group sessions", UsersRound), I("/demos", "Demo classes", Video), I("/requests", "Requests", MessageSquare), I("/attendance", "Attendance", CalendarCheck), I("/teacher-changes", "Teacher changes", Repeat)] },
+        { title: "Finance", items: [I("/teacher-pay", "Teacher pay", Wallet), I("/rates", "Default pay rates", Percent)] },
         { title: "Administration", items: [I("/people", "Users", Users), I("/reports", "Reports", BarChart3), I("/audit", "Audit log", Shield), I("/settings", "Settings", Settings)] },
       ];
   }

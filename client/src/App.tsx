@@ -8,6 +8,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import DownloadApp from "./pages/DownloadApp";
 import Reports from "./pages/Reports";
+import AttendanceSheet from "./pages/AttendanceSheet";
+import TeacherChanges from "./pages/TeacherChanges";
 import Students from "./pages/Students";
 import Demos from "./pages/Demos";
 import Requests from "./pages/Requests";
@@ -79,6 +81,8 @@ export default function App() {
           <Route path="class/:id" element={<ClassLink />} />
           <Route path="reports" element={<Reports />} />
           <Route path="requests" element={<Requests />} />
+          {(isAdmin || isHead || role === "teacher") && <Route path="attendance" element={<AttendanceSheet />} />}
+          {(isAdmin || isHead || role === "accountant") && <Route path="teacher-changes" element={<TeacherChanges />} />}
           <Route path="demos" element={<Demos />} />
           <Route path="students" element={<Students />} />
           <Route path="groups" element={<Groups />} />

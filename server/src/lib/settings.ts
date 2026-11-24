@@ -10,7 +10,7 @@ export const SETTING_DEFAULTS = {
   /** Course validity in days, counted from the first actual class (SRS 11). */
   course_validity_days: 60,
   /** Consecutive absences before an alert is raised. */
-  absent_consecutive_threshold: 7,
+  absent_consecutive_threshold: 5,
   rate_regular_30min: 75,
   rate_demo: 50,
   rate_demo_bonus: 100,

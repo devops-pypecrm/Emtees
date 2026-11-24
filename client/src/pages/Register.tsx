@@ -12,6 +12,7 @@ export default function Register() {
   const submit = trpc.admissions.publicSubmit.useMutation();
   const f = useForm({ fullName: "", mobile: "", whatsapp: "", email: "", gender: "", dateOfBirth: "", place: "", state: "", country: "India", department: "", preferredTiming: "", sessionType: "", amountPaid: "", paymentDate: new Date().toISOString().slice(0, 10), paymentMethod: "", transactionRef: "" });
   const [file, setFile] = useState<File | null>(null);
+  const [others, setOthers] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ dup: boolean } | null>(null);
 
@@ -40,7 +41,14 @@ export default function Register() {
       const up = await fetch(`/api/uploads/receipt/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name, dataBase64: b64 }) });
       const uj = await up.json();
       if (!up.ok) throw new Error(uj.error || "Receipt upload failed");
-      const r = await submit.mutateAsync({ token, ...v, amountPaid: Number(v.amountPaid), department: v.department as any, sessionType: v.sessionType as any, receiptUrl: uj.url, email: v.email || undefined, whatsapp: v.whatsapp || undefined });
+      const toB64 = (x: File) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(x); });
+      const documents: { name: string; url: string; type: string }[] = [];
+      for (const o of others) {
+        const u = await fetch(`/api/uploads/receipt/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: o.name, dataBase64: await toB64(o) }) });
+        const j = await u.json(); if (!u.ok) throw new Error(j.error || `Could not upload ${o.name}`);
+        documents.push({ name: o.name, url: j.url, type: "other" });
+      }
+      const r = await submit.mutateAsync({ token, documents, ...v, amountPaid: Number(v.amountPaid), department: v.department as any, sessionType: v.sessionType as any, receiptUrl: uj.url, email: v.email || undefined, whatsapp: v.whatsapp || undefined });
       setDone({ dup: r.flaggedDuplicate });
     } catch (e: any) { toast.error(e.message); } finally { setBusy(false); }
   };
@@ -78,6 +86,7 @@ export default function Register() {
             <Field label="Payment method *"><Pick value={f.v.paymentMethod} onChange={(x) => f.set("paymentMethod", x)} options={["UPI", "Bank transfer", "Card", "Cash", "Other"].map((x) => ({ value: x, label: x }))} /></Field>
             <Field label="Transaction ID / reference *"><Input value={f.v.transactionRef} onChange={(e) => f.set("transactionRef", e.target.value)} /></Field>
             <div className="md:col-span-2"><Field label="Payment receipt (image or PDF, max 5 MB) *"><Input type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} /></Field></div>
+            <div className="md:col-span-2"><Field label="Other documents (optional, up to 5 files, ID proof etc.)"><Input type="file" multiple accept="image/*,.pdf" onChange={(e) => setOthers(Array.from(e.target.files || []).slice(0, 5))} /></Field></div>
           </div></section>
 
         <Button className="w-full bg-[#C8102E] hover:bg-[#A50C22]" disabled={busy} onClick={send}>{busy ? "Submitting…" : "Submit registration"}</Button>

@@ -25,7 +25,7 @@ export default function Payments() {
           { header: "Student", cell: (r: any) => <div><div className="font-medium">{r.fullName || "—"}</div><div className="text-xs text-slate-500">{r.mobile}</div></div> },
           { header: "Counsellor", cell: (r: any) => <div>{r.counsellorName}<div className="text-xs text-slate-500">{r.counsellorEmpId} · {r.counsellorPhone}</div></div> },
           { header: "Payment", cell: (r: any) => <div><div className="font-medium">{inr(r.amountPaid)}</div><div className="text-xs text-slate-500">{r.paymentMethod} · {r.transactionRef} · {r.paymentDate}</div></div> },
-          { header: "Receipt", cell: (r: any) => r.receiptUrl ? <a className="text-blue-600 underline" target="_blank" rel="noreferrer" href={r.receiptUrl}>View</a> : "—" },
+          { header: "Receipt & documents", nofilter: true, cell: (r: any) => (r.receiptUrl || (r.documents || []).length) ? <div className="space-y-0.5">{r.receiptUrl && <a className="text-blue-600 underline block" target="_blank" rel="noreferrer" href={r.receiptUrl}>Payment receipt</a>}{(r.documents || []).map((d: any, i: number) => <a key={i} className="text-blue-600 underline block" target="_blank" rel="noreferrer" href={d.url}>{d.name}</a>)}</div> : "—" },
           { header: "Status", cell: (r: any) => <div><Chip value={r.status} />{r.verifiedAmount && <div className="text-xs text-slate-500 mt-1">Verified {inr(r.verifiedAmount)}</div>}{r.rejectReason && <div className="text-xs text-red-600 mt-1">{r.rejectReason}</div>}</div> },
           { header: "", cell: (r: any) => r.status === "payment_pending_verification" ? (
             r.duplicateOfUserId && !r.duplicateResolved

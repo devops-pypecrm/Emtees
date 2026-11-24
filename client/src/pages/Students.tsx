@@ -3,6 +3,7 @@ import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import StudentDetail from "@/components/StudentDetail";
 import AddStudentDialog from "@/components/AddStudentDialog";
+import RegistrationLink from "@/components/RegistrationLink";
 import { Plus } from "lucide-react";
 import { Page, Table, Chip, Input, Button, Field, FormDialog, useForm, Pick, DEPT_OPTIONS } from "@/lib/kit";
 import { toast } from "sonner";
@@ -18,9 +19,10 @@ export default function Students() {
   const counsellors = trpc.staff.list.useQuery({ role: "counsellor" }, { enabled: user!.role === "admin" || user!.role === "super_admin" });
   const f = useForm({ name: "", phone: "", email: "", status: "active", password: "", reason: "", department: "", sessionType: "", timing: "", counsellorId: "", validity: "" });
   const isAdmin = user!.role === "admin" || user!.role === "super_admin";
-  const detail = ["admin", "super_admin", "academic_head", "accountant"].includes(user!.role);
+  const canAdd = isAdmin || user!.role === "academic_head" || user!.role === "sales_executive";
+  const detail = ["admin", "super_admin", "academic_head", "accountant", "sales_executive"].includes(user!.role);
   return (
-    <Page title="Students" subtitle="Search by name, mobile or Student ID." actions={isAdmin ? <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4 mr-1" />Add student</Button> : undefined}>
+    <Page title="Students" subtitle="Search by name, mobile or Student ID." actions={canAdd ? <><RegistrationLink /><Button onClick={() => setAdding(true)}><Plus className="h-4 w-4 mr-1" />Add student</Button></> : undefined}>
       <div className="max-w-sm"><Input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
       <Table searchable={false} rows={q.data} empty="No students found" onRow={detail ? (r: any) => setSel(r.id) : undefined}
         cols={[
@@ -29,7 +31,7 @@ export default function Students() {
           { header: "Classes", cell: (r: any) => r.allocated ?? 0 }, { header: "Status", cell: (r: any) => <Chip value={r.status} /> },
           ...(isAdmin ? [{ header: "Login", cell: (r: any) => <span className="text-xs">{r.username}<div className="text-slate-500">{r.raw_password}</div></span> }, { header: "", cell: (r: any) => <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setEdit(r); f.setAll({ name: r.name, phone: r.phone || "", email: r.email || "", status: r.status, password: "", reason: "", department: /hindi/i.test(r.department || "") ? "hindi" : r.department ? "english" : "", sessionType: r.session_type === "group" ? "group" : r.session_type ? "individual" : "", timing: r.preferred_class_time || "", counsellorId: r.counsellor_id ? String(r.counsellor_id) : "", validity: r.validity_end_date ? String(r.validity_end_date).slice(0, 10) : "" }); }}>Edit</Button> }] : []),
         ]} />
-      {isAdmin && <AddStudentDialog open={adding} onClose={() => setAdding(false)} onDone={() => q.refetch()} />}
+      {canAdd && <AddStudentDialog open={adding} onClose={() => setAdding(false)} onDone={() => q.refetch()} />}
       {sel && <StudentDetail id={sel} onClose={() => setSel(null)} />}
       <FormDialog open={!!edit} onClose={() => setEdit(null)} title={`Edit ${edit?.name || ""}`} busy={upd.isPending}
         onSubmit={() => upd.mutate({ id: edit.id, name: f.v.name, phone: f.v.phone, email: f.v.email, status: f.v.status as any, password: f.v.password || undefined, reason: f.v.reason || undefined, department: (f.v.department || undefined) as any, sessionType: (f.v.sessionType || undefined) as any, preferredTiming: f.v.timing || undefined, counsellorId: f.v.counsellorId ? Number(f.v.counsellorId) : undefined, validityEndDate: f.v.validity || undefined })}>

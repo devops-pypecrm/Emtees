@@ -5,12 +5,14 @@ import { Page, Table, Button, Input, Pick, Loading, exportTable } from "@/lib/ki
 import { Download } from "lucide-react";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
-const PRESETS: [string, () => [Date, Date]][] = [
-  ["Today", () => [new Date(), new Date()]],
-  ["Last 7 days", () => [new Date(Date.now() - 6 * 864e5), new Date()]],
-  ["This month", () => { const n = new Date(); return [new Date(n.getFullYear(), n.getMonth(), 1), n]; }],
-  ["Last month", () => { const n = new Date(); return [new Date(n.getFullYear(), n.getMonth() - 1, 1), new Date(n.getFullYear(), n.getMonth(), 0)]; }],
-  ["Last 90 days", () => [new Date(Date.now() - 89 * 864e5), new Date()]],
+const PRESETS: [string, string, () => [Date, Date]][] = [
+  ["today", "Today", () => [new Date(), new Date()]],
+  ["7d", "Last 7 days", () => [new Date(Date.now() - 6 * 864e5), new Date()]],
+  ["month", "This month", () => { const n = new Date(); return [new Date(n.getFullYear(), n.getMonth(), 1), n]; }],
+  ["lastmonth", "Last month", () => { const n = new Date(); return [new Date(n.getFullYear(), n.getMonth() - 1, 1), new Date(n.getFullYear(), n.getMonth(), 0)]; }],
+  ["90d", "Last 90 days", () => [new Date(Date.now() - 89 * 864e5), new Date()]],
+  ["year", "This year", () => { const n = new Date(); return [new Date(n.getFullYear(), 0, 1), n]; }],
+  ["all", "All time", () => [new Date(2000, 0, 1), new Date()]],
 ];
 
 /** All SRS section 17 reports in one screen: custom date range, department filter, search, Excel / PDF export. */
@@ -22,8 +24,11 @@ export default function Reports() {
   const [to, setTo] = useState(iso(new Date()));
   const [dep, setDep] = useState("all");
   const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState("month");
+  const [teacher, setTeacher] = useState("");
+  const teachers = trpc.reports.teachers.useQuery(undefined, { enabled: ["admin", "super_admin", "academic_head", "accountant"].includes(user!.role) });
   useEffect(() => { if (!key && cat.data?.length) setKey(cat.data[0].key); }, [cat.data, key]);
-  const run = trpc.reports.run.useQuery({ key, from: new Date(from + "T00:00:00"), to: new Date(to + "T00:00:00"), department: dep as any, search }, { enabled: !!key, keepPreviousData: true } as any);
+  const run = trpc.reports.run.useQuery({ key, from: new Date(from + "T00:00:00"), to: new Date(to + "T00:00:00"), department: dep as any, search, teacherId: teacher ? Number(teacher) : undefined }, { enabled: !!key, keepPreviousData: true } as any);
   if (!cat.data) return <Loading />;
   const groups = Array.from(new Set(cat.data.map((c: any) => c.group)));
   const r = run.data;
@@ -39,9 +44,12 @@ export default function Reports() {
         </aside>
         <div className="space-y-3 min-w-0">
           <div className="flex flex-wrap items-end gap-3">
-            <div><div className="text-xs text-slate-500 mb-1">From</div><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-            <div><div className="text-xs text-slate-500 mb-1">To</div><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-            <div className="flex gap-1 flex-wrap">{PRESETS.map(([l, f]) => <Button key={l} size="sm" variant="outline" onClick={() => { const [a, b] = f(); setFrom(iso(a)); setTo(iso(b)); }}>{l}</Button>)}</div>
+            <div className="w-44"><div className="text-xs text-slate-500 mb-1">Period</div>
+              <select className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" value={period} onChange={(e) => { const v = e.target.value; setPeriod(v); const f = PRESETS.find((p) => p[0] === v); if (f) { const [a, b] = f[2](); setFrom(iso(a)); setTo(iso(b)); } }}>
+                {PRESETS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}<option value="custom">Custom range</option></select></div>
+            <div><div className="text-xs text-slate-500 mb-1">From</div><Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPeriod("custom"); }} /></div>
+            <div><div className="text-xs text-slate-500 mb-1">To</div><Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPeriod("custom"); }} /></div>
+            {(teachers.data || []).length > 0 && <div className="w-52"><div className="text-xs text-slate-500 mb-1">Teacher</div><Pick value={teacher} onChange={setTeacher} placeholder="All teachers" options={(teachers.data as any[]).map((t) => ({ value: t.id, label: t.name }))} /></div>}
             {user!.role !== "academic_head" && <div className="w-40"><div className="text-xs text-slate-500 mb-1">Department</div><Pick value={dep} onChange={setDep} placeholder="All" options={[{ value: "all", label: "All" }, { value: "english", label: "English" }, { value: "hindi", label: "Hindi" }]} /></div>}
             <div className="w-56"><div className="text-xs text-slate-500 mb-1">Search</div><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, mobile, ID…" /></div>
           </div>
