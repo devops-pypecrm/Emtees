@@ -1,7 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
-  CalendarCheck, Repeat, Bell, LogOut, Menu, X, Home, Users, CreditCard, ClipboardList, Settings, BarChart3, GraduationCap, Wallet,
+  KeyRound, CalendarCheck, Repeat, Bell, LogOut, Menu, X, Home, Users, CreditCard, ClipboardList, Settings, BarChart3, GraduationCap, Wallet,
   UserCheck, Calendar, MessageSquare, Video, Shield, UserPlus, Clock, Percent, UsersRound, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -53,7 +53,7 @@ export function navFor(role: string): Group[] {
         { title: "Admissions", items: [I("/admissions", "Admissions", UserPlus), I("/payments", "Payments", CreditCard)] },
         { title: "Academics", items: [I("/assign", "Assign teachers", UserCheck), I("/students", "Students", Users), I("/timetable", "Timetable", Calendar), I("/groups", "Group sessions", UsersRound), I("/demos", "Demo classes", Video), I("/requests", "Requests", MessageSquare), I("/attendance", "Attendance", CalendarCheck), I("/teacher-changes", "Teacher changes", Repeat)] },
         { title: "Finance", items: [I("/teacher-pay", "Teacher pay", Wallet), I("/rates", "Default pay rates", Percent)] },
-        { title: "Administration", items: [I("/people", "Users", Users), I("/reports", "Reports", BarChart3), I("/audit", "Audit log", Shield), I("/settings", "Settings", Settings)] },
+        { title: "Administration", items: [I("/people", "Users", Users), I("/credentials", "Login credentials", KeyRound), I("/reports", "Reports", BarChart3), I("/audit", "Audit log", Shield), I("/settings", "Settings", Settings)] },
       ];
   }
 }

@@ -9,6 +9,7 @@ import Register from "./pages/Register";
 import DownloadApp from "./pages/DownloadApp";
 import Reports from "./pages/Reports";
 import AttendanceSheet from "./pages/AttendanceSheet";
+import Credentials from "./pages/admin/Credentials";
 import TeacherChanges from "./pages/TeacherChanges";
 import Students from "./pages/Students";
 import Demos from "./pages/Demos";
@@ -90,6 +91,7 @@ export default function App() {
           {(isAdmin || role === "accountant") && <Route path="teacher-pay" element={<TeacherPay />} />}
           {isAdmin && <Route path="admissions" element={<AdminAdmissions />} />}
           {isAdmin && <Route path="people" element={<People />} />}
+          {isAdmin && <Route path="credentials" element={<Credentials />} />}
           {isAdmin && <Route path="rates" element={<Rates />} />}
           {isAdmin && <Route path="settings" element={<SettingsPage />} />}
           {isAdmin && <Route path="audit" element={<Audit />} />}

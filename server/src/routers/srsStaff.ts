@@ -70,6 +70,37 @@ export const srsStaffRouter = createRouter({
     return { changed: Object.keys(changed).length };
   }),
 
+  /** Admin: every login in one list (students and staff) - username and stored password. Owner asked for this; passwords are kept readable on purpose. */
+  credentials: roleQuery("admin").query(async () => {
+    const db = getDb();
+    return (await db.execute(sql`select u.id, u.name, u.role, u.username, u.raw_password "password", u.phone, u.email, u.status, u.last_login_at "lastLoginAt", p.enrollment_id "studentId"
+      from users u left join profiles p on p.user_id=u.id order by case u.role when 'super_admin' then 0 when 'admin' then 1 when 'academic_head' then 2 when 'accountant' then 3 when 'sales_executive' then 4 when 'teacher' then 5 else 6 end, u.name`)).rows as any[];
+  }),
+  /** Admin: change a user's username and/or password (any role). Recorded in the audit log without the password itself. */
+  setCredentials: roleQuery("admin").input(z.object({ id: z.number(), username: z.string().trim().min(3).optional(), password: z.string().trim().min(6).optional(), reason: z.string().optional() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    const u = await db.query.users.findFirst({ where: eq(users.id, input.id) });
+    if (!u) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+    if (u.role === "super_admin" && ctx.user.role !== "super_admin") throw new TRPCError({ code: "FORBIDDEN", message: "Only a super admin can change this account" });
+    const set: any = { updatedAt: new Date() };
+    if (input.username && input.username !== u.username) {
+      const taken = await db.query.users.findFirst({ where: sql`lower(${users.username}) = ${input.username.toLowerCase()} and ${users.id} <> ${input.id}` });
+      if (taken) throw new TRPCError({ code: "CONFLICT", message: `Username ${input.username} is already taken by ${taken.name}` });
+      set.username = input.username;
+    }
+    if (input.password) { set.password = await bcrypt.hash(input.password, 10); set.rawPassword = input.password; set.mustChangePassword = false; }
+    if (Object.keys(set).length === 1) return { ok: true };
+    await db.update(users).set(set).where(eq(users.id, input.id));
+    if (u.role === "sales_executive") {
+      const se: any = {};
+      if (set.username) se.username = set.username;
+      if (input.password) se.password = set.password;
+      if (Object.keys(se).length) await db.update(salesExecutives).set(se).where(eq(salesExecutives.userId, input.id));
+    }
+    await audit(db, ctx.user, "credentials_changed", "user", input.id, { username: u.username }, { username: set.username ?? u.username, password: input.password ? "(changed)" : undefined }, input.reason);
+    return { ok: true };
+  }),
+
   /** All staff accounts (everyone except students), with their SRS profile. */
   list: roleQuery("admin", "academic_head").input(z.object({ role: z.string().optional(), search: z.string().optional(), includeStudents: z.boolean().optional() }).optional()).query(async ({ input }) => {
     const db = getDb();
